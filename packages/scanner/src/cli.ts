@@ -144,12 +144,19 @@ async function main() {
   // 3. Submit
   const batchId = await submitBatchForJob(openai, allBatchLines);
 
-  // 4. Persist
-  await sb.from("batch_jobs").insert({
-    job_date: klDate,
-    openai_batch_id: batchId,
-    status: "submitted",
-  });
+  // 4. Persist (defensive — orphan batch is recoverable but operator must know)
+  const { error: insertError } = await sb
+    .from("batch_jobs")
+    .insert({ job_date: klDate, openai_batch_id: batchId, status: "submitted" });
+
+  if (insertError) {
+    console.error(
+      `ORPHAN BATCH WARNING: OpenAI batch ${batchId} submitted but batch_jobs insert failed.`,
+      `Manually insert: { job_date: '${klDate}', openai_batch_id: '${batchId}', status: 'submitted' }`,
+      `Insert error:`, insertError,
+    );
+    throw insertError;
+  }
 
   console.log(
     `Submitted batch ${batchId} with ${allBatchLines.length} lines for ${klDate}`,
