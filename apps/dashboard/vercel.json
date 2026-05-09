@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd ../.. && pnpm install --frozen-lockfile && pnpm --filter @team-dashboard/shared build && pnpm --filter @team-dashboard/dashboard build",
+  "installCommand": "echo skip-install-handled-by-buildCommand",
+  "outputDirectory": ".next",
+  "framework": "nextjs"
+}
