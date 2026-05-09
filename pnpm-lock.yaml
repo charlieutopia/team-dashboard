@@ -63,6 +63,37 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@20.19.40)
 
+  packages/scanner:
+    dependencies:
+      '@octokit/rest':
+        specifier: ^21.0.0
+        version: 21.1.1
+      '@supabase/supabase-js':
+        specifier: ^2.45.0
+        version: 2.105.4
+      '@team-dashboard/detector-drift':
+        specifier: workspace:*
+        version: link:../detector-drift
+      '@team-dashboard/report-generator':
+        specifier: workspace:*
+        version: link:../report-generator
+      '@team-dashboard/shared':
+        specifier: workspace:*
+        version: link:../shared
+      openai:
+        specifier: ^4.60.0
+        version: 4.104.0(zod@3.25.76)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.40
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@20.19.40)
+
   packages/shared:
     dependencies:
       '@octokit/rest':
