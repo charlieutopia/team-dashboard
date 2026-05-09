@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd ../.. && node --version && npm --version && corepack prepare pnpm@10 --activate && pnpm --version && pnpm install --frozen-lockfile && pnpm --filter @team-dashboard/shared build && pnpm --filter @team-dashboard/dashboard build",
-  "installCommand": "cd ../.. && corepack prepare pnpm@10 --activate",
+  "buildCommand": "cd ../.. && bash build.sh",
+  "installCommand": "echo skip",
   "outputDirectory": ".next"
 }
