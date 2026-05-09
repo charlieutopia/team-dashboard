@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd ../.. && pnpm install --frozen-lockfile && pnpm build --filter '@team-dashboard/shared' && pnpm build --filter '@team-dashboard/dashboard'",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "outputDirectory": "apps/dashboard/.next"
+}
