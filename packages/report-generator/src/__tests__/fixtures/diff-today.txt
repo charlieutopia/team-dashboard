@@ -1,0 +1,54 @@
+diff --git a/src/orders.ts b/src/orders.ts
+index abcdefg..hijklmn 100644
+--- a/src/orders.ts
++++ b/src/orders.ts
+@@ -39,3 +39,45 @@ export async function createOrder(
+   return await db.orders.insert({
+     customer_id,
+     cart_id,
++    status: "draft",
++    created_at: new Date().toISOString(),
++    line_items: cart.items.map(item => ({
++      product_id: item.product_id,
++      quantity: item.quantity,
++      unit_price: item.unit_price,
++      product_name: item.product_name,
++      sku: item.sku,
++    })),
++  });
++}
++
++export async function convertCartToOrder(
++  cart_id: string,
++  idempotency_key: string,
++): Promise<Order> {
++  // Check idempotency: if order with this key exists, return it
++  const existing = await db.orders.findOne({ idempotency_key });
++  if (existing) return existing;
++
++  // Validate cart state
++  const cart = await db.carts.findById(cart_id);
++  if (!cart || cart.is_converted) {
++    throw new Error("Cart already converted or not found");
++  }
++
++  // Reserve inventory
++  for (const item of cart.items) {
++    const stock = await db.inventory.reserve(item.product_id, item.quantity);
++    if (!stock) throw new Error(`Insufficient stock for ${item.product_id}`);
++  }
++
++  // Create order with line items
++  const order = await db.orders.insert({
++    customer_id: cart.customer_id,
++    cart_id,
++    status: "draft",
++    idempotency_key,
++    line_items: cart.items,
++    created_at: new Date().toISOString(),
++  });
++
++  // Clear the cart
++  await db.carts.update(cart_id, { is_converted: true, cleared_at: new Date().toISOString() });
++  return order;
+ }
