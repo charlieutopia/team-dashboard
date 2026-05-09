@@ -1,5 +1,0 @@
-{
-  "buildCommand": "cd ../.. && corepack prepare pnpm@10 --activate && pnpm install --frozen-lockfile && pnpm --filter @team-dashboard/shared build && pnpm --filter @team-dashboard/dashboard build",
-  "installCommand": "echo skip",
-  "outputDirectory": ".next"
-}
