@@ -1,0 +1,5 @@
+{
+  "buildCommand": "pnpm install --frozen-lockfile && pnpm --filter @team-dashboard/shared build && pnpm --filter @team-dashboard/dashboard build",
+  "outputDirectory": "apps/dashboard/.next",
+  "installCommand": "corepack prepare pnpm@10 --activate && pnpm install --frozen-lockfile"
+}
