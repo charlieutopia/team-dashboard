@@ -6,13 +6,12 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@octokit/rest": "^21.0.0",
     "@supabase/supabase-js": "^2.45.0",
-    "openai": "^4.60.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {

@@ -2,20 +2,18 @@
   "name": "@team-dashboard/scanner",
   "version": "0.1.0",
   "type": "module",
-  "main": "./dist/cli.js",
+  "main": "./dist/run-daily.js",
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "start": "node dist/cli.js"
+    "start": "node dist/run-daily.js"
   },
   "dependencies": {
     "@team-dashboard/shared": "workspace:*",
-    "@team-dashboard/detector-drift": "workspace:*",
-    "@team-dashboard/report-generator": "workspace:*",
     "@octokit/rest": "^21.0.0",
     "@supabase/supabase-js": "^2.45.0",
-    "openai": "^4.60.0"
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
