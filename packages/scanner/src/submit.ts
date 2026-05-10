@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 
 export async function submitBatchForJob(
   openai: OpenAI,
@@ -6,16 +6,15 @@ export async function submitBatchForJob(
 ): Promise<string> {
   // Build JSONL string
   const jsonlContent = batchLines.map((line) => JSON.stringify(line)).join("\n");
-  const jsonlBuffer = Buffer.from(jsonlContent, "utf-8");
 
-  // Upload file
-  const fileResponse = await (openai.beta as any).files.upload({
-    file: new File([jsonlBuffer], "batch.jsonl", { type: "text/plain" }),
+  // Upload file (OpenAI SDK v4: openai.files.create, NOT openai.beta.files.upload)
+  const fileResponse = await openai.files.create({
+    file: await toFile(Buffer.from(jsonlContent, "utf-8"), "batch.jsonl"),
     purpose: "batch",
   });
 
-  // Submit batch
-  const batchResponse = await (openai.beta as any).batches.create({
+  // Submit batch (OpenAI SDK v4: openai.batches.create, NOT openai.beta.batches.create)
+  const batchResponse = await openai.batches.create({
     input_file_id: fileResponse.id,
     endpoint: "/v1/chat/completions",
     completion_window: "24h",
