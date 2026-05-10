@@ -1,0 +1,58 @@
+name: Daily Report — Claude Code Headless Analyzer
+
+# Schedule: 07:00 KL daily (= 23:00 UTC previous day, since KL = UTC+8)
+# See ADR 014 (cron-timing decision for synchronous Claude Code).
+# Workflow only fires once GH Actions billing-lock clears on charlieutopia
+# account; until then, run locally via `pnpm scanner:daily` with master.env
+# loaded (see CLAUDE.md operational note).
+
+on:
+  schedule:
+    - cron: '0 23 * * *'   # 23:00 UTC = 07:00 next day Asia/Kuala_Lumpur
+  workflow_dispatch:        # manual trigger for testing
+
+concurrency:
+  group: daily-report
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node + pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      # TODO (Phase 2.A Step 6 follow-up): install Claude Code CLI in CI.
+      # Anthropic does not yet ship the `claude` binary as an npm package,
+      # so this needs a custom installer step here. Track in handoff +
+      # build-brief Open Questions. Until resolved, this workflow can run
+      # the build but the actual `pnpm scanner:daily` step at the bottom
+      # would fail with "claude: command not found".
+      #
+      # When the installer pattern is figured out, drop the comment and add
+      # the install step before "Run daily scanner".
+
+      - name: Run daily scanner (loops devs, calls claude CLI per dev, persists)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_READ_TOKEN: ${{ secrets.GH_READ_TOKEN }}
+        run: pnpm scanner:daily
