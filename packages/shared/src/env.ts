@@ -4,7 +4,7 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
   SUPABASE_ANON_KEY: z.string().min(20).optional(),
-  OPENAI_API_KEY: z.string().startsWith("sk-"),
+  CLAUDE_CODE_OAUTH_TOKEN: z.string().min(20),
   GH_READ_TOKEN: z.string().startsWith("ghp_"),
 });
 
