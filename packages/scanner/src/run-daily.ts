@@ -46,8 +46,21 @@ function computeKlDate(now: Date): string {
     .split("T")[0]!;
 }
 
+// Per-branch diff cap. Empirical from Phase 2.A Step 7: devs with multi-branch
+// large-diff payloads pushed prompts past the model's effective context (200K
+// tokens) and the CLI exited 1 with no stderr. Capping at 30KB per branch
+// (~7500 tokens) keeps even 5-branch devs comfortably under context.
+const MAX_DIFF_TEXT_BYTES_PER_BRANCH = 30_000;
+
 function buildDiffText(files: { filename: string; patch: string }[]): string {
-  return files.map((f) => `--- ${f.filename}\n${f.patch}`).join("\n\n");
+  const full = files.map((f) => `--- ${f.filename}\n${f.patch}`).join("\n\n");
+  const fullBytes = Buffer.byteLength(full, "utf8");
+  if (fullBytes <= MAX_DIFF_TEXT_BYTES_PER_BRANCH) return full;
+  const truncated = full.slice(0, MAX_DIFF_TEXT_BYTES_PER_BRANCH);
+  return (
+    truncated +
+    `\n\n[... TRUNCATED — original ${fullBytes} bytes, kept first ${MAX_DIFF_TEXT_BYTES_PER_BRANCH} ...]`
+  );
 }
 
 export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
