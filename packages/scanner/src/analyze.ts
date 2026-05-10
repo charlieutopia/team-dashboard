@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { DailyReport } from "@team-dashboard/shared";
 
 export const GENERATOR_VERSION = "v1+claude-code-headless";
-const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_TIMEOUT_MS = 180_000; // 3 min — empirical from Phase 2.A Step 7 first run; 60s was too tight for real diff payloads
 const STRICT_PREAMBLE =
   "OUTPUT STRICT JSON ONLY. NO MARKDOWN FENCES. NO COMMENTARY. NO PREFACE. JUST THE JSON OBJECT.\n\n";
 
@@ -150,10 +150,15 @@ function runOnce(
   timeoutMs: number,
 ): Promise<SpawnAttemptResult> {
   return new Promise((resolve) => {
-    const child = spawn(binary, ["-p", prompt, "--output-format", "json"], {
+    // Pipe prompt via stdin instead of as positional argv entry — argv has a
+    // ~256KB OS limit (E2BIG) that real multi-branch diffs exceed in practice.
+    // Discovered Phase 2.A Step 7 first run (5 of 16 devs hit E2BIG immediately).
+    const child = spawn(binary, ["-p", "--output-format", "json"], {
       env: { ...process.env },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
+    child.stdin?.write(prompt);
+    child.stdin?.end();
 
     let stdout = "";
     let stderr = "";
@@ -212,6 +217,15 @@ interface ParseAttemptFailure {
 
 type ParseResult = ParseAttempt | ParseAttemptFailure;
 
+// Strip optional ```json ... ``` or ``` ... ``` markdown fences before JSON.parse.
+// The model sometimes wraps output in fences despite the prompt instruction;
+// rather than rely entirely on retry-with-stricter-prompt, salvage the inner
+// payload first. Discovered Phase 2.A Step 7 first run (1 of 16 devs).
+export function stripMarkdownFences(s: string): string {
+  const m = s.match(/^\s*```(?:json)?\s*\n?([\s\S]*?)\n?\s*```\s*$/);
+  return m && m[1] !== undefined ? m[1].trim() : s.trim();
+}
+
 function parseEnvelopeAndValidate(stdout: string): ParseResult {
   let envelope: unknown;
   try {
@@ -230,11 +244,12 @@ function parseEnvelopeAndValidate(stdout: string): ParseResult {
       reason: `envelope missing .result string field`,
     };
   }
+  const cleaned = stripMarkdownFences(result);
   let inner: unknown;
   try {
-    inner = JSON.parse(result);
+    inner = JSON.parse(cleaned);
   } catch (e) {
-    const preview = result.slice(0, 40).replace(/\s+/g, " ");
+    const preview = cleaned.slice(0, 40).replace(/\s+/g, " ");
     return {
       ok: false,
       reason: `JSON parse failed: ${(e as Error).message} (preview: ${preview})`,

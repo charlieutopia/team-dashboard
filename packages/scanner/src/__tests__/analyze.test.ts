@@ -13,7 +13,7 @@ vi.mock("child_process", () => ({
 }));
 
 // Import AFTER mocks are registered.
-const { analyzeDevDay } = await import("../analyze.js");
+const { analyzeDevDay, stripMarkdownFences } = await import("../analyze.js");
 type AnalyzeInput = Parameters<typeof analyzeDevDay>[0];
 
 interface FakeChildOptions {
@@ -24,7 +24,20 @@ interface FakeChildOptions {
   emitDelayMs?: number;
 }
 
+class FakeStdin {
+  written = "";
+  ended = false;
+  write(chunk: string | Buffer): boolean {
+    this.written += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    return true;
+  }
+  end(): void {
+    this.ended = true;
+  }
+}
+
 class FakeChild extends EventEmitter {
+  stdin = new FakeStdin();
   stdout = new EventEmitter();
   stderr = new EventEmitter();
   killed = false;
@@ -54,7 +67,6 @@ class FakeChild extends EventEmitter {
   kill(signal?: string): boolean {
     this.killed = true;
     this.killSignal = signal;
-    // Simulate the OS reaping the process: emit close shortly after kill.
     setTimeout(() => this.emit("close", null), 0);
     return true;
   }
@@ -135,7 +147,30 @@ describe("analyzeDevDay", () => {
     expect(result.generator_version).toBe("v1+claude-code-headless");
   });
 
-  it("retry on bad inner JSON — second call uses strict-preamble prompt", async () => {
+  it("argv shape — uses stdin for prompt, no positional prompt arg (E2BIG fix)", async () => {
+    spawnMock.mockImplementationOnce(
+      () => new FakeChild({ stdoutChunks: [envelope(validReport)] }),
+    );
+
+    await analyzeDevDay(baseInput, { claudeBinary: "claude-stub" });
+
+    const firstCallArgs = spawnMock.mock.calls[0] as unknown as [
+      string,
+      string[],
+      Record<string, unknown>,
+    ];
+    expect(firstCallArgs[0]).toBe("claude-stub");
+    // argv must be exactly ["-p", "--output-format", "json"] — no prompt positional
+    expect(firstCallArgs[1]).toEqual(["-p", "--output-format", "json"]);
+
+    // Prompt was written to stdin
+    const child = spawnMock.mock.results[0]!.value as FakeChild;
+    expect(child.stdin.written).toContain("Developer: naznajmuddin");
+    expect(child.stdin.written).toContain("STRICT JSON");
+    expect(child.stdin.ended).toBe(true);
+  });
+
+  it("retry on bad inner JSON — second call's stdin starts with strict-preamble", async () => {
     spawnMock
       .mockImplementationOnce(
         () =>
@@ -157,16 +192,11 @@ describe("analyzeDevDay", () => {
     if ("parse_failed" in result) throw new Error("expected DailyReport");
     expect(result.trajectory).toBe("on_track");
 
-    const secondCallArgs = spawnMock.mock.calls[1] as unknown as [
-      string,
-      string[],
-    ];
-    const argv = secondCallArgs[1];
-    // -p prompt is one of the argv entries; locate it.
-    const pIdx = argv.indexOf("-p");
-    expect(pIdx).toBeGreaterThanOrEqual(0);
-    const prompt = argv[pIdx + 1] ?? "";
-    expect(prompt.startsWith("OUTPUT STRICT JSON ONLY")).toBe(true);
+    // Second call's stdin starts with the strict preamble
+    const secondChild = spawnMock.mock.results[1]!.value as FakeChild;
+    expect(secondChild.stdin.written.startsWith("OUTPUT STRICT JSON ONLY")).toBe(
+      true,
+    );
   });
 
   it("retry on zod validation failure — second call succeeds", async () => {
@@ -218,6 +248,24 @@ describe("analyzeDevDay", () => {
     expect(result.developer_handle).toBe("naznajmuddin");
     expect(result.date).toBe("2026-05-10");
     expect(result.error_msg).toMatch(/JSON parse failed twice/);
+  });
+
+  it("strips ```json markdown fence before parse — happy path on first try", async () => {
+    const fenced = "```json\n" + JSON.stringify(validReport) + "\n```";
+    spawnMock.mockImplementationOnce(
+      () =>
+        new FakeChild({
+          stdoutChunks: [JSON.stringify({ result: fenced })],
+        }),
+    );
+
+    const result = await analyzeDevDay(baseInput, {
+      claudeBinary: "claude-stub",
+    });
+
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    if ("parse_failed" in result) throw new Error("expected DailyReport");
+    expect(result.trajectory).toBe("on_track");
   });
 
   it("retries on timeout — first hangs, second succeeds", async () => {
@@ -273,5 +321,22 @@ describe("analyzeDevDay", () => {
     expect(spawnMock).toHaveBeenCalledTimes(2);
     if ("parse_failed" in result) throw new Error("expected DailyReport");
     expect(result.trajectory).toBe("on_track");
+  });
+});
+
+describe("stripMarkdownFences (exported helper)", () => {
+  it("strips ```json wrapper", () => {
+    const input = '```json\n{"a":1}\n```';
+    expect(stripMarkdownFences(input)).toBe('{"a":1}');
+  });
+
+  it("strips bare ``` wrapper", () => {
+    const input = '```\n{"a":1}\n```';
+    expect(stripMarkdownFences(input)).toBe('{"a":1}');
+  });
+
+  it("returns unchanged when no fence present", () => {
+    expect(stripMarkdownFences('{"a":1}')).toBe('{"a":1}');
+    expect(stripMarkdownFences('  {"a":1}  ')).toBe('{"a":1}'); // trims whitespace
   });
 });
