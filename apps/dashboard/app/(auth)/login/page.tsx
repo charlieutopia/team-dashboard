@@ -1,28 +1,90 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
-  async function handleLogin() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
     const supabase = createSupabaseBrowserClient();
-    await supabase.auth.signInWithOAuth({
-      provider: 'github',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
     });
+    setSubmitting(false);
+    if (signInError) {
+      setError(signInError.message);
+      return;
+    }
+    router.push('/');
+    router.refresh();
   }
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4">
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold mb-2">Team Dashboard</h1>
-        <p className="text-sm text-gray-500 mb-6">Boss-only daily team activity report</p>
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-sm space-y-4"
+        autoComplete="on"
+      >
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-semibold mb-1">Team Dashboard</h1>
+          <p className="text-sm text-gray-500">Boss-only daily team activity report</p>
+        </div>
+
+        <div>
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            Password
+          </label>
+          <input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+          />
+        </div>
+
+        {error && (
+          <p className="text-sm text-red-600" role="alert">
+            {error}
+          </p>
+        )}
+
         <button
-          onClick={handleLogin}
-          className="px-5 py-3 bg-gray-900 text-white rounded-lg font-medium active:scale-95 transition"
+          type="submit"
+          disabled={submitting}
+          className="w-full px-5 py-3 bg-gray-900 text-white rounded-lg font-medium active:scale-95 transition disabled:opacity-50 disabled:active:scale-100"
         >
-          Sign in with GitHub
+          {submitting ? 'Signing in…' : 'Sign in'}
         </button>
-      </div>
+      </form>
     </main>
   );
 }
