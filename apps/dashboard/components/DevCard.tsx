@@ -2,6 +2,10 @@ import { TrajectoryDot } from './TrajectoryDot';
 import type { DevReportRow } from '@/lib/queries';
 
 export function DevCard({ report }: { report: DevReportRow }) {
+  if (report.parse_failed) {
+    return <FailedCard report={report} />;
+  }
+
   const m = report.metrics ?? {};
   const sp = report.spec_progress ?? { advancing: [], drifting: [] };
 
@@ -40,6 +44,28 @@ export function DevCard({ report }: { report: DevReportRow }) {
         <summary className="text-xs text-blue-600 cursor-pointer select-none hover:text-blue-700">Tap to expand</summary>
         <ExpandedSection report={report} />
       </details>
+    </article>
+  );
+}
+
+function FailedCard({ report }: { report: DevReportRow }) {
+  return (
+    <article className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-4 mb-3 mx-3 shadow-sm">
+      <header className="flex items-center gap-3 mb-2">
+        <span className="inline-block w-3 h-3 rounded-full bg-red-400" aria-label="failed" />
+        <div>
+          <h2 className="text-base font-semibold leading-tight">{report.display_name}</h2>
+          <p className="text-xs text-gray-500">@{report.developer_handle}</p>
+        </div>
+      </header>
+      <p className="text-xs text-red-700 dark:text-red-300">
+        Report generation failed.
+      </p>
+      {report.error_msg && (
+        <p className="mt-1 text-xs font-mono text-red-600 dark:text-red-400 break-all">
+          {report.error_msg}
+        </p>
+      )}
     </article>
   );
 }
