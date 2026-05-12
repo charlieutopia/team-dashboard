@@ -49,6 +49,17 @@ jobs:
       # When the installer pattern is figured out, drop the comment and add
       # the install step before "Run daily scanner".
 
+      - name: Sync HR (leave_applications + leave_application_days from utopia-hub)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          HUB_SUPABASE_URL: ${{ secrets.HUB_SUPABASE_URL }}
+          HUB_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.HUB_SUPABASE_SERVICE_ROLE_KEY }}
+          # Dummy values for the optional env vars that loadEnv() still validates
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_READ_TOKEN: ${{ secrets.GH_READ_TOKEN }}
+        run: pnpm scanner:sync-hr
+
       - name: Run daily scanner (loops devs, calls claude CLI per dev, persists)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
