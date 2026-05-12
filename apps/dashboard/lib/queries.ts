@@ -286,6 +286,129 @@ export async function getDevTimeline(
   return { developer, days, totals, windowDays, klToday };
 }
 
+// ---- Weekly digests (Layer B) ----
+
+export type Momentum =
+  | 'accelerating'
+  | 'steady'
+  | 'slowing'
+  | 'stalled'
+  | 'no_activity';
+
+export interface WeeklyDigestRow {
+  developer_id: string;
+  developer_handle: string;
+  display_name: string;
+  week_start_date: string;
+  summary: string | null;
+  momentum: Momentum | null;
+  top_themes: string[] | null;
+  generator_version: string | null;
+  parse_failed: boolean;
+  error_msg: string | null;
+}
+
+const MOMENTUM_ORDER: Record<string, number> = {
+  accelerating: 0,
+  steady: 1,
+  slowing: 2,
+  stalled: 3,
+  no_activity: 4,
+};
+
+export async function getDevWeeklyDigest(
+  supabase: SupabaseClient,
+  githubHandle: string,
+): Promise<WeeklyDigestRow | null> {
+  const { data: devRow } = await supabase
+    .from('developers')
+    .select('id, github_handle, display_name')
+    .eq('github_handle', githubHandle)
+    .maybeSingle();
+
+  if (!devRow) return null;
+  const developer = devRow as { id: string; github_handle: string; display_name: string };
+
+  const { data, error } = await supabase
+    .from('weekly_reports')
+    .select(
+      'week_start_date, summary, momentum, top_themes, generator_version, parse_failed, error_msg',
+    )
+    .eq('developer_id', developer.id)
+    .order('week_start_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as Omit<WeeklyDigestRow, 'developer_id' | 'developer_handle' | 'display_name'>;
+  return {
+    developer_id: developer.id,
+    developer_handle: developer.github_handle,
+    display_name: developer.display_name,
+    week_start_date: row.week_start_date,
+    summary: row.summary,
+    momentum: row.momentum,
+    top_themes: row.top_themes,
+    generator_version: row.generator_version,
+    parse_failed: row.parse_failed,
+    error_msg: row.error_msg,
+  };
+}
+
+export interface AllWeeklyDigestsResult {
+  weekStartDate: string | null;
+  rows: WeeklyDigestRow[];
+}
+
+export async function getAllWeeklyDigests(
+  supabase: SupabaseClient,
+): Promise<AllWeeklyDigestsResult> {
+  // Find most-recent week_start_date that has any rows
+  const { data: latest, error: dateErr } = await supabase
+    .from('weekly_reports')
+    .select('week_start_date')
+    .order('week_start_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (dateErr) throw dateErr;
+  const weekStartDate = (latest as { week_start_date: string } | null)?.week_start_date ?? null;
+  if (!weekStartDate) return { weekStartDate: null, rows: [] };
+
+  const { data, error } = await supabase
+    .from('weekly_reports')
+    .select(
+      `developer_id, week_start_date, summary, momentum, top_themes, generator_version, parse_failed, error_msg, developers!inner ( github_handle, display_name )`,
+    )
+    .eq('week_start_date', weekStartDate);
+
+  if (error) throw error;
+
+  const rows: WeeklyDigestRow[] = (data ?? []).map((r: any) => ({
+    developer_id: r.developer_id,
+    developer_handle: r.developers.github_handle,
+    display_name: r.developers.display_name,
+    week_start_date: r.week_start_date,
+    summary: r.summary,
+    momentum: r.momentum,
+    top_themes: r.top_themes,
+    generator_version: r.generator_version,
+    parse_failed: r.parse_failed ?? false,
+    error_msg: r.error_msg,
+  }));
+
+  // Sort: failures first, then by momentum (accelerating → no_activity)
+  rows.sort((a, b) => {
+    if (a.parse_failed !== b.parse_failed) return a.parse_failed ? -1 : 1;
+    const oA = MOMENTUM_ORDER[a.momentum ?? 'no_activity'] ?? 4;
+    const oB = MOMENTUM_ORDER[b.momentum ?? 'no_activity'] ?? 4;
+    return oA - oB;
+  });
+
+  return { weekStartDate, rows };
+}
+
 export async function getDriftFindings(supabase: SupabaseClient, developerId: string, reportDate: string) {
   const { data, error } = await supabase
     .from('drift_findings')
