@@ -25,6 +25,22 @@ export interface DailyReport {
   generator_version: string;
 }
 
+export type Momentum =
+  | "accelerating"
+  | "steady"
+  | "slowing"
+  | "stalled"
+  | "no_activity";
+
+export interface WeeklyReport {
+  developer_handle: string;
+  week_start_date: string; // YYYY-MM-DD KL Monday
+  summary: string;
+  momentum: Momentum;
+  top_themes: string[];
+  generator_version: string;
+}
+
 export interface DriftFinding {
   bucket: DriftBucket;
   spec_item_path: string;
