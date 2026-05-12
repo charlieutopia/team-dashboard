@@ -1,0 +1,56 @@
+name: Monthly Report — Claude Code Headless Analyzer
+
+# Schedule: 1st of every month at 07:00 KL (= 23:00 UTC on the last day of
+# the previous month, or formally `0 23 1 * *` to fire at 23:00 UTC on the
+# 1st of each month — which is 07:00 KL on the 1st).
+# Wait — cron `0 23 1 * *` means "at 23:00 UTC on the 1st" which is 07:00
+# KL on the 2nd. To fire on the 1st of the month KL, we need the trigger
+# at 23:00 UTC on the LAST day of the prior month — which cron can't
+# express cleanly across months of different lengths. Practical workaround:
+# fire at 23:00 UTC on the 1st (= 07:00 KL on the 2nd) so the analyzer
+# processes the just-completed month. That's one day late vs an ideal
+# "07:00 KL on the 1st", but Boss reads in the morning either way.
+on:
+  schedule:
+    - cron: '0 23 1 * *'   # 23:00 UTC on the 1st = 07:00 KL on the 2nd; analyzes the just-completed month
+  workflow_dispatch:        # manual trigger for testing
+
+concurrency:
+  group: monthly-report
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node + pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      # TODO (Phase 2.A Step 6 follow-up): install Claude Code CLI in CI.
+      # Same TODO as daily-report.yml / weekly-report.yml. Until resolved,
+      # this workflow runs the build but `pnpm scanner:monthly` would fail
+      # in CI. Run locally via `pnpm scanner:monthly` with master.env loaded.
+
+      - name: Run monthly scanner (one analyze call per dev, aggregates a full month)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: pnpm scanner:monthly

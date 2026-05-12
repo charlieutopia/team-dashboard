@@ -41,6 +41,15 @@ export interface WeeklyReport {
   generator_version: string;
 }
 
+export interface MonthlyReport {
+  developer_handle: string;
+  month_start_date: string; // YYYY-MM-DD KL first-of-month
+  summary: string;
+  momentum: Momentum;
+  top_themes: string[];
+  generator_version: string;
+}
+
 export interface DriftFinding {
   bucket: DriftBucket;
   spec_item_path: string;

@@ -1,19 +1,21 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { getDevTimeline, getDevWeeklyDigest } from '@/lib/queries';
+import { getDevTimeline, getDevWeeklyDigest, getDevMonthlyDigest } from '@/lib/queries';
 import { TrajectoryHeatmap, type HeatmapDay } from '@/components/TrajectoryHeatmap';
 import { DayTimelineCard } from '@/components/DayTimelineCard';
 import { WeeklyDigestCard } from '@/components/WeeklyDigestCard';
+import { MonthlyDigestCard } from '@/components/MonthlyDigestCard';
 import { KpiStrip } from '@/components/KpiStrip';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DevTimelinePage({ params }: { params: { handle: string } }) {
   const supabase = createSupabaseServerClient();
-  const [result, weekly] = await Promise.all([
+  const [result, weekly, monthly] = await Promise.all([
     getDevTimeline(supabase, params.handle, 30),
     getDevWeeklyDigest(supabase, params.handle),
+    getDevMonthlyDigest(supabase, params.handle),
   ]);
 
   if (!result) notFound();
@@ -57,6 +59,13 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
         </p>
       </header>
 
+      {monthly && (
+        <section className="border-b border-gray-100 dark:border-gray-800">
+          <p className="px-4 pt-3 pb-1 text-xs text-gray-500">This Month</p>
+          <MonthlyDigestCard digest={monthly} />
+        </section>
+      )}
+
       {weekly && (
         <section className="border-b border-gray-100 dark:border-gray-800">
           <p className="px-4 pt-3 pb-1 text-xs text-gray-500">
@@ -66,10 +75,10 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
         </section>
       )}
 
-      {!weekly && (
+      {!weekly && !monthly && (
         <section className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
           <p className="text-xs text-gray-500">
-            No weekly digest yet — first one fires next Monday.
+            No weekly or monthly digest yet — the weekly fires next Monday, the monthly on the 1st of next month.
           </p>
         </section>
       )}
