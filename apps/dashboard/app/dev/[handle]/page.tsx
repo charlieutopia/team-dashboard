@@ -1,15 +1,19 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { getDevTimeline } from '@/lib/queries';
+import { getDevTimeline, getDevWeeklyDigest } from '@/lib/queries';
 import { TrajectoryHeatmap, type HeatmapDay } from '@/components/TrajectoryHeatmap';
 import { DayTimelineCard } from '@/components/DayTimelineCard';
+import { WeeklyDigestCard } from '@/components/WeeklyDigestCard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DevTimelinePage({ params }: { params: { handle: string } }) {
   const supabase = createSupabaseServerClient();
-  const result = await getDevTimeline(supabase, params.handle, 30);
+  const [result, weekly] = await Promise.all([
+    getDevTimeline(supabase, params.handle, 30),
+    getDevWeeklyDigest(supabase, params.handle),
+  ]);
 
   if (!result) notFound();
 
@@ -45,6 +49,23 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
           {windowDays}-day window · ending {klToday}
         </p>
       </header>
+
+      {weekly && (
+        <section className="border-b border-gray-100 dark:border-gray-800">
+          <p className="px-4 pt-3 pb-1 text-xs text-gray-500">
+            This Week · {weekly.week_start_date}
+          </p>
+          <WeeklyDigestCard digest={weekly} showLink={false} />
+        </section>
+      )}
+
+      {!weekly && (
+        <section className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+          <p className="text-xs text-gray-500">
+            No weekly digest yet — first one fires next Monday.
+          </p>
+        </section>
+      )}
 
       <section className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
         <p className="text-xs text-gray-500 mb-2">{windowDays}-day trajectory</p>

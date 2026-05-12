@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getLatestReports } from '@/lib/queries';
 import { DevCard } from '@/components/DevCard';
@@ -22,7 +23,15 @@ export default async function HomePage() {
             <>No reports generated yet</>
           )}
         </p>
-        <h1 className="text-xl font-semibold">Team Report</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold">Team Report</h1>
+          <Link
+            href="/week"
+            className="text-xs text-blue-600 hover:text-blue-700 whitespace-nowrap"
+          >
+            This week →
+          </Link>
+        </div>
         {rows.length > 0 && (
           <p className="text-xs text-gray-500 mt-1">
             {succeededCount} succeeded {failedCount > 0 && <span className="text-red-600">· {failedCount} failed</span>}

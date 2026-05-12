@@ -10,7 +10,9 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "scanner:daily": "node packages/scanner/dist/run-daily.js",
-    "scanner:probe-tone": "node packages/scanner/dist/probe-tone.js"
+    "scanner:weekly": "node packages/scanner/dist/run-weekly.js",
+    "scanner:probe-tone": "node packages/scanner/dist/probe-tone.js",
+    "scanner:probe-weekly": "node packages/scanner/dist/probe-weekly.js"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
