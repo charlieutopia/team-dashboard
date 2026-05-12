@@ -1,0 +1,56 @@
+name: Weekly Report — Claude Code Headless Analyzer
+
+# Schedule: 07:30 KL Monday (= 23:30 UTC Sunday, since KL = UTC+8).
+# Fires AFTER the daily report's 07:00 KL run so the two analyzers don't
+# race for the same Anthropic quota. Aggregates the previous Mon→Sun week
+# from each dev's daily_reports into one weekly_reports row per dev.
+# Tone rules locked in ADR 015 (Boss-readable: BLUF + first-name +
+# business-language + 100-180 word cap + momentum + top_themes).
+# Same CI billing-lock + claude-CLI-install caveats as daily-report.yml.
+
+on:
+  schedule:
+    - cron: '30 23 * * 0'   # Sunday 23:30 UTC = Monday 07:30 KL
+  workflow_dispatch:         # manual trigger for testing
+
+concurrency:
+  group: weekly-report
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node + pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      # TODO (Phase 2.A Step 6 follow-up): install Claude Code CLI in CI.
+      # See identical TODO in .github/workflows/daily-report.yml. Until
+      # the installer pattern is figured out, this workflow can run the
+      # build but the `pnpm scanner:weekly` step would fail with
+      # "claude: command not found". Run locally via `pnpm scanner:weekly`
+      # with master.env loaded as a stop-gap (also documented in CLAUDE.md).
+
+      - name: Run weekly scanner (one analyze call per dev, aggregates 7 daily rows)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: pnpm scanner:weekly
