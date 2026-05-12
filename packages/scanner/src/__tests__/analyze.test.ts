@@ -13,7 +13,8 @@ vi.mock("child_process", () => ({
 }));
 
 // Import AFTER mocks are registered.
-const { analyzeDevDay, stripMarkdownFences } = await import("../analyze.js");
+const { analyzeDevDay, stripMarkdownFences, firstNameFrom, buildPrompt } =
+  await import("../analyze.js");
 type AnalyzeInput = Parameters<typeof analyzeDevDay>[0];
 
 interface FakeChildOptions {
@@ -163,9 +164,9 @@ describe("analyzeDevDay", () => {
     // argv must be exactly ["-p", "--output-format", "json"] — no prompt positional
     expect(firstCallArgs[1]).toEqual(["-p", "--output-format", "json"]);
 
-    // Prompt was written to stdin
+    // Prompt was written to stdin and contains the developer identity + strict-output marker
     const child = spawnMock.mock.results[0]!.value as FakeChild;
-    expect(child.stdin.written).toContain("Developer: naznajmuddin");
+    expect(child.stdin.written).toContain("naznajmuddin");
     expect(child.stdin.written).toContain("STRICT JSON");
     expect(child.stdin.ended).toBe(true);
   });
@@ -321,6 +322,48 @@ describe("analyzeDevDay", () => {
     expect(spawnMock).toHaveBeenCalledTimes(2);
     if ("parse_failed" in result) throw new Error("expected DailyReport");
     expect(result.trajectory).toBe("on_track");
+  });
+});
+
+describe("firstNameFrom (exported helper)", () => {
+  it("returns first whitespace-separated token of display_name", () => {
+    expect(firstNameFrom("Naz Najmuddin", "naznajmuddin")).toBe("Naz");
+    expect(firstNameFrom("Aliesa", "rjnraliesa")).toBe("Aliesa");
+    expect(firstNameFrom("Mary  Anne  O'Brien", "mob")).toBe("Mary");
+  });
+
+  it("falls back to githubHandle when display_name missing or blank", () => {
+    expect(firstNameFrom(undefined, "naznajmuddin")).toBe("naznajmuddin");
+    expect(firstNameFrom("", "naznajmuddin")).toBe("naznajmuddin");
+    expect(firstNameFrom("   ", "naznajmuddin")).toBe("naznajmuddin");
+  });
+});
+
+describe("buildPrompt — Boss-readable prompt structure", () => {
+  it("uses first name when display_name provided", () => {
+    const prompt = buildPrompt({ ...baseInput, display_name: "Naz Najmuddin" });
+    expect(prompt).toContain("First name (use this in the summary): Naz");
+    // Examples and the SUMMARY RULES should reference the first name multiple times
+    expect((prompt.match(/Naz/g) ?? []).length).toBeGreaterThan(3);
+  });
+
+  it("falls back to handle when display_name missing", () => {
+    const prompt = buildPrompt(baseInput);
+    expect(prompt).toContain("First name (use this in the summary): naznajmuddin");
+  });
+
+  it("includes the BLUF + business-language + banned-words instructions", () => {
+    const prompt = buildPrompt({ ...baseInput, display_name: "Naz Najmuddin" });
+    expect(prompt).toContain("BLUF");
+    expect(prompt).toContain("Business language");
+    expect(prompt).toContain("Banned words");
+    expect(prompt).toContain("60-100 words");
+  });
+
+  it("preserves the cold-context constraint", () => {
+    const prompt = buildPrompt(baseInput);
+    expect(prompt).toContain("ONLY the diffs");
+    expect(prompt).toContain("IGNORE commit messages");
   });
 });
 
