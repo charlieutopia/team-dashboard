@@ -59,29 +59,29 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
         </p>
       </header>
 
-      {monthly && (
-        <section className="border-b border-gray-100 dark:border-gray-800">
-          <p className="px-4 pt-3 pb-1 text-xs text-gray-500">This Month</p>
+      <section className="border-b border-gray-100 dark:border-gray-800">
+        <p className="px-4 pt-3 pb-1 text-xs text-gray-500">This Month</p>
+        {monthly ? (
           <MonthlyDigestCard digest={monthly} />
-        </section>
-      )}
-
-      {weekly && (
-        <section className="border-b border-gray-100 dark:border-gray-800">
-          <p className="px-4 pt-3 pb-1 text-xs text-gray-500">
-            This Week · {weekly.week_start_date}
+        ) : (
+          <p className="px-4 pb-3 text-sm text-gray-500">
+            No monthly summary yet — the first one lands at the start of next month.
           </p>
+        )}
+      </section>
+
+      <section className="border-b border-gray-100 dark:border-gray-800">
+        <p className="px-4 pt-3 pb-1 text-xs text-gray-500">
+          This Week{weekly ? ` · ${weekly.week_start_date}` : ''}
+        </p>
+        {weekly ? (
           <WeeklyDigestCard digest={weekly} showLink={false} />
-        </section>
-      )}
-
-      {!weekly && !monthly && (
-        <section className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-          <p className="text-xs text-gray-500">
-            No weekly or monthly digest yet — the weekly fires next Monday, the monthly on the 1st of next month.
+        ) : (
+          <p className="px-4 pb-3 text-sm text-gray-500">
+            No weekly digest yet — the first one lands next Monday.
           </p>
-        </section>
-      )}
+        )}
+      </section>
 
       <KpiStrip totals={totals} windowDays={windowDays} />
 
