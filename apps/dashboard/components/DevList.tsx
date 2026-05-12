@@ -25,16 +25,16 @@ export function DevList({ rows }: { rows: DevReportRow[] }) {
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search a developer by name…"
+            placeholder="Find someone…"
             className="w-full text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            aria-label="Search developers"
+            aria-label="Find a developer"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"
-              aria-label="Clear search"
+              aria-label="Clear"
             >
               ✕
             </button>
@@ -42,14 +42,14 @@ export function DevList({ rows }: { rows: DevReportRow[] }) {
         </div>
         {q && (
           <p className="text-[11px] text-gray-500 mt-1.5">
-            Showing {filtered.length} of {rows.length} developers
+            {filtered.length} of {rows.length}
           </p>
         )}
       </div>
 
       {filtered.length === 0 ? (
         <div className="px-6 py-8 text-center text-sm text-gray-500">
-          No developer matches &ldquo;{query}&rdquo;.
+          No one matches &ldquo;{query}&rdquo;.
         </div>
       ) : (
         <div>

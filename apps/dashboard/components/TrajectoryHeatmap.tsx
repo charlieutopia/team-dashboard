@@ -38,8 +38,17 @@ function classForDay(day: HeatmapDay): string {
   return EMPTY_CLASS;
 }
 
+// Translate raw trajectory enum values to plain English for tooltips
+const TRAJECTORY_LABEL: Record<string, string> = {
+  on_track: 'on track',
+  ahead: 'ahead',
+  behind: 'behind',
+  stuck: 'no work that day',
+  no_activity: 'no work that day',
+};
+
 function labelForDay(day: HeatmapDay): string {
-  if (day.parse_failed) return `${day.date} · daily analysis failed`;
+  if (day.parse_failed) return `${day.date} · daily report failed to generate`;
   if (day.onLeave) {
     const half = day.isHalfDayLeave ? ' (half-day)' : '';
     return `${day.date} · on leave${half}${day.leaveType ? ` — ${day.leaveType}` : ''}`;
@@ -47,9 +56,11 @@ function labelForDay(day: HeatmapDay): string {
   if (day.isPublicHoliday) {
     return `${day.date} · public holiday${day.holidayName ? ` — ${day.holidayName}` : ''}`;
   }
-  if (day.hasData && day.trajectory) return `${day.date} · ${day.trajectory}`;
+  if (day.hasData && day.trajectory) {
+    return `${day.date} · ${TRAJECTORY_LABEL[day.trajectory] ?? day.trajectory}`;
+  }
   if (day.isWeekend) return `${day.date} · weekend`;
-  return `${day.date} · no data`;
+  return `${day.date} · no report yet`;
 }
 
 export function TrajectoryHeatmap({ days }: { days: HeatmapDay[] }) {
@@ -75,12 +86,12 @@ export function TrajectoryHeatmap({ days }: { days: HeatmapDay[] }) {
 
 function Legend() {
   const items: { cls: string; label: string }[] = [
-    { cls: 'bg-trajectory-on_track', label: 'shipped' },
-    { cls: 'bg-trajectory-stuck', label: 'stuck' },
+    { cls: 'bg-trajectory-on_track', label: 'worked' },
+    { cls: 'bg-trajectory-stuck', label: 'should have worked' },
     { cls: LEAVE_FULL_CLASS, label: 'on leave' },
     { cls: HOLIDAY_CLASS, label: 'public holiday' },
     { cls: WEEKEND_CLASS, label: 'weekend' },
-    { cls: EMPTY_CLASS, label: 'no data' },
+    { cls: EMPTY_CLASS, label: 'no report yet' },
   ];
   return (
     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-500">
