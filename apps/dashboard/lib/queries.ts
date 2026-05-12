@@ -502,6 +502,60 @@ export async function getAllWeeklyDigests(
   return { weekStartDate, rows };
 }
 
+// ---- Monthly digests (Phase 2 Step 3) ----
+
+export interface MonthlyDigestRow {
+  developer_id: string;
+  developer_handle: string;
+  display_name: string;
+  month_start_date: string;
+  summary: string | null;
+  momentum: Momentum | null;
+  top_themes: string[] | null;
+  generator_version: string | null;
+  parse_failed: boolean;
+  error_msg: string | null;
+}
+
+export async function getDevMonthlyDigest(
+  supabase: SupabaseClient,
+  githubHandle: string,
+): Promise<MonthlyDigestRow | null> {
+  const { data: devRow } = await supabase
+    .from('developers')
+    .select('id, github_handle, display_name')
+    .eq('github_handle', githubHandle)
+    .maybeSingle();
+  if (!devRow) return null;
+  const developer = devRow as { id: string; github_handle: string; display_name: string };
+
+  const { data, error } = await supabase
+    .from('monthly_reports')
+    .select(
+      'month_start_date, summary, momentum, top_themes, generator_version, parse_failed, error_msg',
+    )
+    .eq('developer_id', developer.id)
+    .order('month_start_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as Omit<MonthlyDigestRow, 'developer_id' | 'developer_handle' | 'display_name'>;
+  return {
+    developer_id: developer.id,
+    developer_handle: developer.github_handle,
+    display_name: developer.display_name,
+    month_start_date: row.month_start_date,
+    summary: row.summary,
+    momentum: row.momentum,
+    top_themes: row.top_themes,
+    generator_version: row.generator_version,
+    parse_failed: row.parse_failed,
+    error_msg: row.error_msg,
+  };
+}
+
 export async function getDriftFindings(supabase: SupabaseClient, developerId: string, reportDate: string) {
   const { data, error } = await supabase
     .from('drift_findings')
