@@ -87,7 +87,7 @@ function makeMockOctokit(opts: MockOctokitOpts) {
 
 interface MockSbConfig {
   trackedRepos?: { id: string; full_name: string; spec_module: string }[];
-  developersByHandle?: Record<string, { id: string }>;
+  developersByHandle?: Record<string, { id: string; display_name?: string | null }>;
 }
 
 function makeMockSb(cfg: MockSbConfig = {}) {

@@ -155,13 +155,14 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
   interface ResolvedDev {
     handle: string;
     developer_id: string;
+    display_name: string | null;
     branches: BranchPayload[];
   }
   const resolved: ResolvedDev[] = [];
   for (const [handle, branches] of branchesByHandle) {
     const devRes = await sb
       .from("developers")
-      .select("id")
+      .select("id, display_name")
       .eq("github_handle", handle)
       .maybeSingle();
     if (devRes.error) {
@@ -169,13 +170,18 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
         `developers query failed for ${handle}: ${devRes.error.message}`,
       );
     }
-    const row = devRes.data as { id: string } | null;
+    const row = devRes.data as { id: string; display_name: string | null } | null;
     if (!row) {
       console.log(`skip ${handle}: not in developers table`);
       counters.skipped_no_developer += 1;
       continue;
     }
-    resolved.push({ handle, developer_id: row.id, branches });
+    resolved.push({
+      handle,
+      developer_id: row.id,
+      display_name: row.display_name,
+      branches,
+    });
   }
 
   // 6. Serial analyze + upsert loop.
@@ -189,6 +195,7 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
         repo_full_name: primaryRepoFullName,
         branches: dev.branches,
         spec_text: primaryRepoSpec,
+        display_name: dev.display_name ?? undefined,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

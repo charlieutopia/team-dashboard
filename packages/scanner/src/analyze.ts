@@ -18,6 +18,22 @@ export interface AnalyzeInput {
     diff_text: string;
   }[];
   spec_text?: string;
+  // Optional human display name (e.g. "Naz Najmuddin"). Used to derive a
+  // first-name salutation in the Boss-readable summary. Falls back to the
+  // GitHub handle when missing.
+  display_name?: string;
+}
+
+// First token of display_name, or the github handle as fallback. Boss-facing
+// summaries address each developer by first name only (Range / 15Five tone).
+export function firstNameFrom(
+  displayName: string | undefined,
+  githubHandle: string,
+): string {
+  const trimmed = (displayName ?? "").trim();
+  if (!trimmed) return githubHandle;
+  const first = trimmed.split(/\s+/)[0];
+  return first && first.length > 0 ? first : githubHandle;
 }
 
 export interface AnalyzeFailure {
@@ -76,6 +92,8 @@ export const dailyReportSchema = z.object({
 });
 
 export function buildPrompt(input: AnalyzeInput): string {
+  const firstName = firstNameFrom(input.display_name, input.developer_handle);
+
   const branchBlocks = input.branches
     .map(
       (b) =>
@@ -88,47 +106,88 @@ export function buildPrompt(input: AnalyzeInput): string {
     : `\n(no spec module configured)\n`;
 
   return [
-    `You are an analyzer producing a single STRICT JSON DailyReport for one developer's day.`,
+    `You are writing a daily activity note for the Boss to read on her phone.`,
+    `She manages developers but does NOT read code. Speak business outcomes, not implementation details.`,
     ``,
-    `Developer: ${input.developer_handle}`,
+    `## Who you're describing`,
+    `First name (use this in the summary): ${firstName}`,
+    `GitHub handle (for your reference only — DO NOT put this in the summary): ${input.developer_handle}`,
     `Date (Asia/Kuala_Lumpur, YYYY-MM-DD): ${input.date}`,
-    `Repo: ${input.repo_full_name}`,
+    `Project: ${input.repo_full_name}`,
     ``,
-    `## Cold-context constraint`,
-    `Use ONLY the diffs and branch metadata below. Do NOT use commit messages, chat, PR descriptions, or prior reports as evidence — they are biased authoring artefacts. Treat the diff hunks as the only ground truth.`,
+    `## Ground truth`,
+    `Use ONLY the diffs and branch metadata below. IGNORE commit messages, chat, PR descriptions, prior reports — they may be biased authoring artefacts. The code changes are the only ground truth.`,
     ``,
     `## Branches`,
     branchBlocks || "(no branches)",
     ``,
-    `## Spec context`,
+    `## Spec context (what this person is supposed to be working on)`,
     specBlock,
     ``,
-    `## Output contract — STRICT JSON, no markdown, no prose`,
+    `## Your output — STRICT JSON, NO markdown fences, NO commentary`,
+    ``,
     `Return ONE JSON object with EXACTLY these fields:`,
     `{`,
-    `  "developer_handle": string,           // pass through "${input.developer_handle}"`,
-    `  "date": string,                       // pass through "${input.date}"`,
-    `  "summary": string,                    // 150-200 word natural English narrative grounded in diffs`,
+    `  "developer_handle": "${input.developer_handle}",   // PASS THROUGH`,
+    `  "date": "${input.date}",                  // PASS THROUGH`,
+    `  "summary": string,                        // see SUMMARY RULES below — Boss reads this`,
     `  "metrics": {`,
-    `    "commits_today": integer,`,
+    `    "commits_today": integer,               // count of commits attributable to this person today`,
     `    "commits_yesterday": integer,`,
     `    "lines_added_today": integer,`,
     `    "lines_removed_today": integer,`,
-    `    "files_touched_today": string[]     // file paths from the diff`,
+    `    "files_touched_today": string[]         // file paths from the changes`,
     `  },`,
-    `  "spec_progress": {`,
+    `  "spec_progress": {                        // technical — for Charlie's drill-down audit, NOT the Boss surface`,
     `    "advancing": [{ "spec_item_path": string, "advance_evidence": string }],`,
     `    "drifting":  [{ "spec_item_path": string, "drift_evidence":  string }]`,
     `  },`,
     `  "trajectory": "on_track" | "ahead" | "behind" | "stuck" | "no_activity",`,
-    `  "generator_version": string           // pass through any string; orchestrator overwrites`,
+    `  "generator_version": string               // any string — orchestrator overwrites`,
     `}`,
     ``,
-    `Field rules:`,
-    `- developer_handle, date, generator_version are PASS-THROUGH — echo "${input.developer_handle}" / "${input.date}" / any-string. Orchestrator overwrites generator_version.`,
-    `- trajectory MUST be exactly one of the five enum values above.`,
-    `- All array fields must be present (use [] when empty). All integer fields must be >= 0.`,
-    `- No additional top-level fields. No markdown fences. No commentary.`,
+    `## SUMMARY RULES (the Boss-facing field — get this right)`,
+    ``,
+    `The summary is the Boss's whole window into ${firstName}'s day. She's on her phone. She has 10 seconds.`,
+    ``,
+    `1. **BLUF — Bottom Line Up Front.** Sentence 1 = the headline: what was the result, or what's the state. Examples:`,
+    `   - "${firstName} finished the part that decides which message goes to which staff."`,
+    `   - "${firstName} is stuck on the auto-reply rules — the test cases don't match what the spec asks for yet."`,
+    `   - "Quiet day for ${firstName} — one small fix to the customer name display."`,
+    `2. **First name only.** Use "${firstName}" — never the GitHub handle, never "the developer", never "they/them" as the subject.`,
+    `3. **Business language, not code language.** Translate code into business outcomes:`,
+    `   - GOOD: "the part that decides which message goes to which staff"`,
+    `   - BAD:  "the routing module"`,
+    `   - GOOD: "the screen where customers see their order history"`,
+    `   - BAD:  "the order-history component"`,
+    `4. **Banned words inside the summary string:** diff, commit, rebase, merge, PR, branch, API, function, variable, schema, migration, SHA, repository, refactor, hotfix, dependency, module, component, endpoint. If you reach for one, rewrite as what it does for the business.`,
+    `5. **60-100 words. Hard cap 100.** Shorter wins. Cut filler.`,
+    `6. **One short paragraph.** No bullet points, no headers, no markdown.`,
+    `7. **Tone: like texting an investor about what your team did today.** Plain English, direct, no jargon, no hedging.`,
+    ``,
+    `## SUMMARY EXAMPLES (study these — match this tone)`,
+    ``,
+    `GOOD (active day, on track):`,
+    `"${firstName} shipped the new auto-routing today. Incoming customer messages now land with the right staff member based on who handled them last. The work moved fast and matches what the spec asks for. No blockers."`,
+    ``,
+    `GOOD (stuck day):`,
+    `"${firstName} is stuck. Second day trying to make the bulk-import handle Excel files with merged cells, but the test cases keep failing. May need a different approach — what was tried today (a custom parser) added complexity without fixing the core issue."`,
+    ``,
+    `GOOD (quiet day):`,
+    `"Quiet day for ${firstName} — one small fix to how customer names display in the message list. Likely paused on bigger work; nothing in the changes signals a blocker."`,
+    ``,
+    `BAD (tech-y — DO NOT do this):`,
+    `"${firstName} committed 4 changes to the feat/inbox-routing branch, refactoring the router.ts module and updating the API call signatures..."`,
+    ``,
+    `BAD (no first name — DO NOT do this):`,
+    `"The developer worked on the routing module today, with 4 commits..."`,
+    ``,
+    `## Field rules (other fields)`,
+    `- developer_handle / date / generator_version: PASS-THROUGH (echo the values above; orchestrator overwrites generator_version).`,
+    `- metrics: count from the diffs; integers >= 0.`,
+    `- spec_progress: technical drill-down — file paths and code-level evidence are OK here.`,
+    `- trajectory: pick exactly one of the five enums.`,
+    `- All array fields present (use [] when empty). No additional top-level fields. No markdown fences anywhere in the output.`,
   ].join("\n");
 }
 
