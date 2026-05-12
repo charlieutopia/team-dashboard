@@ -130,6 +130,13 @@ export interface DevTimelineDay {
   trajectory: 'on_track' | 'ahead' | 'behind' | 'stuck' | 'no_activity' | null;
   parse_failed: boolean;
   error_msg: string | null;
+  // Phase 2 Step 2 additions — leave + PH awareness on each day:
+  on_leave: boolean;
+  leave_type: string | null;
+  is_half_day_leave: boolean;
+  is_public_holiday: boolean;
+  holiday_name: string | null;
+  is_weekend: boolean;
 }
 
 export interface DevTimelineTotals {
@@ -142,6 +149,13 @@ export interface DevTimelineTotals {
   unique_files_touched: number;
   total_advancing: number;
   total_drifting: number;
+  // Phase 2 Step 2 KPI fields:
+  working_days_in_window: number; // calendar - weekends - public_holidays
+  on_leave_days: number; // full + half (half-day = 0.5)
+  should_have_worked: number; // working_days_in_window - on_leave_days
+  days_shipped: number; // days with commits_today > 0 (excludes parse_failed)
+  stuck_days: number; // should_have_worked - days_shipped
+  ship_pct: number; // days_shipped / should_have_worked * 100, 0 when no should
 }
 
 export interface DevTimelineResult {
@@ -187,33 +201,76 @@ export async function getDevTimeline(
   const oldestDate = dateList[dateList.length - 1]!;
   const newestDate = dateList[0]!;
 
-  // 3. Fetch reports in window for this developer
-  const { data: reports, error: repErr } = await supabase
-    .from('daily_reports')
-    .select(`
-      report_date,
-      summary,
-      metrics,
-      spec_progress,
-      trajectory,
-      parse_failed,
-      error_msg
-    `)
-    .eq('developer_id', developer.id)
-    .gte('report_date', oldestDate)
-    .lte('report_date', newestDate);
+  // 3. Fetch reports + leave_days + public_holidays in window (3 parallel queries)
+  const [reportsRes, leavesRes, holidaysRes] = await Promise.all([
+    supabase
+      .from('daily_reports')
+      .select(`
+        report_date,
+        summary,
+        metrics,
+        spec_progress,
+        trajectory,
+        parse_failed,
+        error_msg
+      `)
+      .eq('developer_id', developer.id)
+      .gte('report_date', oldestDate)
+      .lte('report_date', newestDate),
+    supabase
+      .from('developer_leave_days')
+      .select('leave_date, leave_type, is_half_day, half_segment')
+      .eq('developer_id', developer.id)
+      .gte('leave_date', oldestDate)
+      .lte('leave_date', newestDate),
+    supabase
+      .from('public_holidays')
+      .select('holiday_date, name')
+      .eq('state', 'KL')
+      .gte('holiday_date', oldestDate)
+      .lte('holiday_date', newestDate),
+  ]);
 
-  if (repErr) throw repErr;
+  if (reportsRes.error) throw reportsRes.error;
+  if (leavesRes.error) throw leavesRes.error;
+  if (holidaysRes.error) throw holidaysRes.error;
 
-  // 4. Index reports by date
+  // 4. Index by date
   const reportMap = new Map<string, any>();
-  (reports ?? []).forEach((r: any) => {
+  (reportsRes.data ?? []).forEach((r: any) => {
     reportMap.set(r.report_date, r);
+  });
+  const leaveMap = new Map<string, { leave_type: string; is_half_day: boolean }>();
+  (leavesRes.data ?? []).forEach((l: any) => {
+    leaveMap.set(l.leave_date, {
+      leave_type: l.leave_type,
+      is_half_day: l.is_half_day,
+    });
+  });
+  // Multiple holidays can share a date (e.g. Thaipusam + Federal Territory Day on 2026-02-01)
+  // — keep the first one we see; the dashboard tooltip shows that name.
+  const holidayMap = new Map<string, string>();
+  (holidaysRes.data ?? []).forEach((h: any) => {
+    if (!holidayMap.has(h.holiday_date)) {
+      holidayMap.set(h.holiday_date, h.name);
+    }
   });
 
   // 5. Left-join: build days array in newest-first order, fill empties
   const days: DevTimelineDay[] = dateList.map(date => {
     const r = reportMap.get(date);
+    const leave = leaveMap.get(date);
+    const holidayName = holidayMap.get(date) ?? null;
+    const dayOfWeek = new Date(date + 'T00:00:00Z').getUTCDay(); // 0=Sun, 6=Sat
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const base = {
+      on_leave: !!leave,
+      leave_type: leave?.leave_type ?? null,
+      is_half_day_leave: leave?.is_half_day ?? false,
+      is_public_holiday: !!holidayName,
+      holiday_name: holidayName,
+      is_weekend: isWeekend,
+    };
     if (!r) {
       return {
         report_date: date,
@@ -223,6 +280,7 @@ export async function getDevTimeline(
         trajectory: null,
         parse_failed: false,
         error_msg: null,
+        ...base,
       };
     }
     return {
@@ -233,10 +291,11 @@ export async function getDevTimeline(
       trajectory: r.trajectory ?? null,
       parse_failed: r.parse_failed ?? false,
       error_msg: r.error_msg ?? null,
+      ...base,
     };
   });
 
-  // 6. Aggregate totals over days WITH data
+  // 6. Aggregate totals over days WITH data + Phase 2 KPI computation
   const filesSet = new Set<string>();
   let totalCommits = 0;
   let totalLinesAdded = 0;
@@ -247,13 +306,34 @@ export async function getDevTimeline(
   let failedDays = 0;
   let daysWithData = 0;
 
+  // Phase 2 KPI accumulators
+  let workingDaysInWindow = 0;
+  let onLeaveDaysAccum = 0; // sum of 1.0 / 0.5 contributions
+  let daysShipped = 0;
+
   for (const day of days) {
+    // KPI math — works on every day, not just days with daily_reports
+    if (!day.is_weekend && !day.is_public_holiday) {
+      workingDaysInWindow += 1;
+    }
+    if (day.on_leave) {
+      onLeaveDaysAccum += day.is_half_day_leave ? 0.5 : 1;
+    }
+    if (
+      !day.parse_failed &&
+      day.metrics &&
+      Number((day.metrics as any).commits_today ?? 0) > 0
+    ) {
+      daysShipped += 1;
+    }
+
+    // Existing totals (only days WITH data)
     const hasData = day.parse_failed || day.summary !== null || day.metrics !== null || day.trajectory !== null;
     if (!hasData) continue;
     daysWithData++;
     if (day.parse_failed) {
       failedDays++;
-      continue; // metrics not trustworthy on failed days
+      continue;
     }
     if (day.trajectory === 'on_track' || day.trajectory === 'ahead') onTrackDays++;
     const m = day.metrics ?? {};
@@ -271,6 +351,13 @@ export async function getDevTimeline(
     if (Array.isArray(sp.drifting)) totalDrifting += sp.drifting.length;
   }
 
+  const shouldHaveWorked = Math.max(0, workingDaysInWindow - onLeaveDaysAccum);
+  const stuckDays = Math.max(0, shouldHaveWorked - daysShipped);
+  const shipPct =
+    shouldHaveWorked > 0
+      ? Math.round((daysShipped / shouldHaveWorked) * 100)
+      : 0;
+
   const totals: DevTimelineTotals = {
     total_days_with_data: daysWithData,
     on_track_days: onTrackDays,
@@ -281,6 +368,12 @@ export async function getDevTimeline(
     unique_files_touched: filesSet.size,
     total_advancing: totalAdvancing,
     total_drifting: totalDrifting,
+    working_days_in_window: workingDaysInWindow,
+    on_leave_days: onLeaveDaysAccum,
+    should_have_worked: shouldHaveWorked,
+    days_shipped: daysShipped,
+    stuck_days: stuckDays,
+    ship_pct: shipPct,
   };
 
   return { developer, days, totals, windowDays, klToday };
