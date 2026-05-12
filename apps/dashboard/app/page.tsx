@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getLatestReports } from '@/lib/queries';
-import { DevCard } from '@/components/DevCard';
+import { DevList } from '@/components/DevList';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,9 +45,7 @@ export default async function HomePage() {
           <p>Run <code className="font-mono">pnpm scanner:daily</code> locally to generate today&apos;s reports.</p>
         </div>
       ) : (
-        <div>
-          {rows.map(r => <DevCard key={r.developer_id} report={r} />)}
-        </div>
+        <DevList rows={rows} />
       )}
     </main>
   );

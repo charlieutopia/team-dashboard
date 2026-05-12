@@ -5,6 +5,7 @@ import { getDevTimeline, getDevWeeklyDigest } from '@/lib/queries';
 import { TrajectoryHeatmap, type HeatmapDay } from '@/components/TrajectoryHeatmap';
 import { DayTimelineCard } from '@/components/DayTimelineCard';
 import { WeeklyDigestCard } from '@/components/WeeklyDigestCard';
+import { KpiStrip } from '@/components/KpiStrip';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,12 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
     trajectory: d.trajectory,
     parse_failed: d.parse_failed,
     hasData: d.parse_failed || d.summary !== null || d.metrics !== null || d.trajectory !== null,
+    onLeave: d.on_leave,
+    leaveType: d.leave_type,
+    isHalfDayLeave: d.is_half_day_leave,
+    isPublicHoliday: d.is_public_holiday,
+    holidayName: d.holiday_name,
+    isWeekend: d.is_weekend,
   }));
 
   const daysWithDataOnly = days.filter(
@@ -66,6 +73,8 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
           </p>
         </section>
       )}
+
+      <KpiStrip totals={totals} windowDays={windowDays} />
 
       <section className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
         <p className="text-xs text-gray-500 mb-2">{windowDays}-day trajectory</p>
