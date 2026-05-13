@@ -3,7 +3,7 @@ import type { Octokit } from "@octokit/rest";
 import { createClient } from "@supabase/supabase-js";
 import { loadEnv, createGitHubClient } from "@team-dashboard/shared";
 import type { DailyReport } from "@team-dashboard/shared";
-import { enumerateActiveBranches } from "./enumerate.js";
+import { enumerateActiveBranches, enumerateOpenPrs } from "./enumerate.js";
 import { getDiffBetweenCommits } from "./diff.js";
 import { getSpecForModule } from "./spec.js";
 import { analyzeDevDay, type AnalyzeInput, type AnalyzeResult } from "./analyze.js";
@@ -25,6 +25,7 @@ export interface RunDailyResult {
   reports_failed: number;
   skipped_no_developer: number;
   branches_synced: number;
+  prs_synced: number;
 }
 
 interface BranchPayload {
@@ -84,6 +85,7 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
     reports_failed: 0,
     skipped_no_developer: 0,
     branches_synced: 0,
+    prs_synced: 0,
   };
 
   // 1. Read tracked repos
@@ -279,14 +281,18 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
   // their stale rows cleared; devs with M→K rows have the table reflect K.
   const activeDevsRes = await sb
     .from("developers")
-    .select("id")
+    .select("id, github_handle")
     .eq("active", true);
   if (activeDevsRes.error) {
     console.error(
-      `developer_active_branches sync — failed to list active devs: ${activeDevsRes.error.message}`,
+      `active devs query failed: ${activeDevsRes.error.message}`,
     );
   } else {
-    const activeDevIds = (activeDevsRes.data ?? []).map((r) => (r as { id: string }).id);
+    const activeDevs = (activeDevsRes.data ?? []) as {
+      id: string;
+      github_handle: string;
+    }[];
+    const activeDevIds = activeDevs.map((d) => d.id);
     if (activeDevIds.length > 0) {
       const delRes = await sb
         .from("developer_active_branches")
@@ -325,6 +331,73 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
         );
       } else {
         counters.branches_synced = branchInserts.length;
+      }
+    }
+
+    // 8. Sync developer_open_prs (Phase 3 Step 4).
+    // Same delete-then-insert per active developer pattern. One GH search call
+    // per (active dev × tracked repo) — at 16 devs × 1 repo = 16 calls, well
+    // under the 5000/hour authed rate limit. Errors per dev fall back to
+    // logging + continue (the sync is best-effort, not transactional).
+    if (activeDevIds.length > 0) {
+      const delPrs = await sb
+        .from("developer_open_prs")
+        .delete()
+        .in("developer_id", activeDevIds);
+      if (delPrs.error) {
+        console.error(
+          `developer_open_prs sync — delete failed: ${delPrs.error.message}`,
+        );
+      }
+    }
+
+    interface PrInsertRow {
+      developer_id: string;
+      repo_full_name: string;
+      pr_number: number;
+      pr_title: string;
+      pr_url: string;
+      pr_state: "open" | "draft";
+      pr_created_at: string | null;
+      pr_updated_at: string | null;
+    }
+    const prInserts: PrInsertRow[] = [];
+    for (const dev of activeDevs) {
+      for (const repo of trackedRepos) {
+        try {
+          const prs = await enumerateOpenPrs(
+            octokit,
+            repo.full_name,
+            dev.github_handle,
+          );
+          for (const pr of prs) {
+            prInserts.push({
+              developer_id: dev.id,
+              repo_full_name: repo.full_name,
+              pr_number: pr.pr_number,
+              pr_title: pr.pr_title,
+              pr_url: pr.pr_url,
+              pr_state: pr.pr_state,
+              pr_created_at: pr.pr_created_at,
+              pr_updated_at: pr.pr_updated_at,
+            });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(
+            `enumerateOpenPrs failed for ${dev.github_handle} in ${repo.full_name}: ${msg}`,
+          );
+        }
+      }
+    }
+    if (prInserts.length > 0) {
+      const insPrs = await sb.from("developer_open_prs").insert(prInserts);
+      if (insPrs.error) {
+        console.error(
+          `developer_open_prs sync — insert failed: ${insPrs.error.message}`,
+        );
+      } else {
+        counters.prs_synced = prInserts.length;
       }
     }
   }

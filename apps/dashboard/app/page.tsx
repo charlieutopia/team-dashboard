@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import {
   getActiveBranchesByDev,
+  getCadenceByDev,
   getLatestReports,
+  getOpenPrsByDev,
   getTodayStatus,
 } from '@/lib/queries';
 import { DevList } from '@/components/DevList';
@@ -12,14 +14,18 @@ export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const supabase = createSupabaseServerClient();
-  const [{ reportDate, klToday, rows }, today, branches] = await Promise.all([
-    getLatestReports(supabase),
-    getTodayStatus(supabase),
-    getActiveBranchesByDev(supabase),
-  ]);
-  // Suppress per-card branch section pre-bootstrap (table empty) so we don't
-  // mislead Boss with "No active branch" before the scanner has ever run.
+  const [{ reportDate, klToday, rows }, today, branches, prs, cadenceByDev] =
+    await Promise.all([
+      getLatestReports(supabase),
+      getTodayStatus(supabase),
+      getActiveBranchesByDev(supabase),
+      getOpenPrsByDev(supabase),
+      getCadenceByDev(supabase),
+    ]);
+  // Suppress per-card sections pre-bootstrap (table empty) so we don't
+  // mislead Boss with empty pills before the scanner has ever populated.
   const branchesByDev = branches.populated ? branches.byDev : undefined;
+  const prsByDev = prs.populated ? prs.byDev : undefined;
 
   const isStale = reportDate !== null && reportDate < klToday;
   const succeededCount = rows.filter(r => !r.parse_failed).length;
@@ -67,7 +73,13 @@ export default async function HomePage() {
           <p>Run <code className="font-mono">pnpm scanner:daily</code> locally to generate today&apos;s reports.</p>
         </div>
       ) : (
-        <DevList rows={rows} todayStatusByDev={today.perDev} branchesByDev={branchesByDev} />
+        <DevList
+          rows={rows}
+          todayStatusByDev={today.perDev}
+          branchesByDev={branchesByDev}
+          prsByDev={prsByDev}
+          cadenceByDev={cadenceByDev}
+        />
       )}
     </main>
   );

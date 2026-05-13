@@ -2,19 +2,30 @@ import Link from 'next/link';
 import { TrajectoryDot } from './TrajectoryDot';
 import { TodayStatusPill } from './TodayStatusPill';
 import { DevBranchList } from './DevBranchList';
-import type { ActiveBranchRow, DevReportRow, TodayDevStatus } from '@/lib/queries';
+import { DevSignalsStrip } from './DevSignalsStrip';
+import type {
+  ActiveBranchRow,
+  CadenceEntry,
+  DevReportRow,
+  OpenPrRow,
+  TodayDevStatus,
+} from '@/lib/queries';
 
 export function DevCard({
   report,
   todayStatus,
   branches,
+  prs,
+  cadence,
 }: {
   report: DevReportRow;
   todayStatus?: TodayDevStatus;
   branches?: ActiveBranchRow[];
+  prs?: OpenPrRow[];
+  cadence?: CadenceEntry;
 }) {
   if (report.parse_failed) {
-    return <FailedCard report={report} todayStatus={todayStatus} branches={branches} />;
+    return <FailedCard report={report} todayStatus={todayStatus} branches={branches} prs={prs} cadence={cadence} />;
   }
 
   const m = report.metrics ?? {};
@@ -62,6 +73,13 @@ export function DevCard({
         </p>
       </Link>
 
+      <DevSignalsStrip
+        prs={prs}
+        cadence={cadence}
+        githubHandle={report.developer_handle}
+        primaryRepo={branches?.[0]?.repo_full_name}
+      />
+
       {branches && <DevBranchList branches={branches} />}
 
       <details className="mt-3">
@@ -76,10 +94,14 @@ function FailedCard({
   report,
   todayStatus,
   branches,
+  prs,
+  cadence,
 }: {
   report: DevReportRow;
   todayStatus?: TodayDevStatus;
   branches?: ActiveBranchRow[];
+  prs?: OpenPrRow[];
+  cadence?: CadenceEntry;
 }) {
   return (
     <article className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-4 mb-3 mx-3 shadow-sm relative">
@@ -108,6 +130,12 @@ function FailedCard({
           </p>
         )}
       </Link>
+      <DevSignalsStrip
+        prs={prs}
+        cadence={cadence}
+        githubHandle={report.developer_handle}
+        primaryRepo={branches?.[0]?.repo_full_name}
+      />
       {branches && <DevBranchList branches={branches} />}
     </article>
   );

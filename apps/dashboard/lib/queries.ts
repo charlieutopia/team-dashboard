@@ -786,6 +786,115 @@ export async function getTodayStatus(
   };
 }
 
+// ---- Open PRs (Phase 3 Step 4) ----
+
+export interface OpenPrRow {
+  id: string;
+  developer_id: string;
+  repo_full_name: string;
+  pr_number: number;
+  pr_title: string;
+  pr_url: string;
+  pr_state: 'open' | 'draft';
+  pr_created_at: string | null;
+  pr_updated_at: string | null;
+  captured_at: string;
+}
+
+export async function getOpenPrsByDev(
+  supabase: SupabaseClient,
+): Promise<{
+  byDev: Record<string, OpenPrRow[]>;
+  populated: boolean;
+}> {
+  const [activeDevsRes, prsRes] = await Promise.all([
+    supabase.from('developers').select('id').eq('active', true),
+    supabase
+      .from('developer_open_prs')
+      .select(
+        'id, developer_id, repo_full_name, pr_number, pr_title, pr_url, pr_state, pr_created_at, pr_updated_at, captured_at',
+      )
+      .order('pr_updated_at', { ascending: false, nullsFirst: false }),
+  ]);
+
+  if (activeDevsRes.error) throw activeDevsRes.error;
+  if (prsRes.error) throw prsRes.error;
+
+  const byDev: Record<string, OpenPrRow[]> = {};
+  for (const row of (activeDevsRes.data ?? []) as { id: string }[]) {
+    byDev[row.id] = [];
+  }
+  for (const row of (prsRes.data ?? []) as OpenPrRow[]) {
+    const existing = byDev[row.developer_id];
+    if (existing) {
+      existing.push(row);
+    } else {
+      byDev[row.developer_id] = [row];
+    }
+  }
+  return { byDev, populated: (prsRes.data ?? []).length > 0 };
+}
+
+// ---- Cadence (Phase 3 Step 4) ----
+
+export interface CadenceEntry {
+  thisWeek: number;
+  lastWeek: number;
+  deltaPct: number; // -100 .. +∞; 0 when both weeks empty
+  direction: 'up' | 'flat' | 'down' | 'no_data';
+}
+
+export async function getCadenceByDev(
+  supabase: SupabaseClient,
+): Promise<Record<string, CadenceEntry>> {
+  const klToday = computeKlDate(new Date());
+  const oldestDay = shiftKlDate(klToday, -13); // last 14 days inclusive
+  const thisWeekStart = shiftKlDate(klToday, -6); // last 7 days inclusive
+
+  const { data, error } = await supabase
+    .from('daily_reports')
+    .select('developer_id, report_date, metrics')
+    .gte('report_date', oldestDay)
+    .lte('report_date', klToday);
+  if (error) throw error;
+
+  const accum = new Map<
+    string,
+    { thisWeek: number; lastWeek: number }
+  >();
+  for (const row of (data ?? []) as {
+    developer_id: string;
+    report_date: string;
+    metrics: { commits_today?: number } | null;
+  }[]) {
+    const commits = Number(row.metrics?.commits_today ?? 0);
+    const bucket = row.report_date >= thisWeekStart ? 'thisWeek' : 'lastWeek';
+    const existing = accum.get(row.developer_id) ?? { thisWeek: 0, lastWeek: 0 };
+    existing[bucket] += commits;
+    accum.set(row.developer_id, existing);
+  }
+
+  const out: Record<string, CadenceEntry> = {};
+  for (const [devId, { thisWeek, lastWeek }] of accum) {
+    if (thisWeek === 0 && lastWeek === 0) {
+      out[devId] = { thisWeek: 0, lastWeek: 0, deltaPct: 0, direction: 'no_data' };
+      continue;
+    }
+    if (lastWeek === 0) {
+      // Anything-vs-zero is unbounded; treat as up.
+      out[devId] = { thisWeek, lastWeek: 0, deltaPct: 100, direction: 'up' };
+      continue;
+    }
+    const deltaPct = Math.round(((thisWeek - lastWeek) / lastWeek) * 100);
+    let direction: CadenceEntry['direction'];
+    if (deltaPct > 20) direction = 'up';
+    else if (deltaPct < -20) direction = 'down';
+    else direction = 'flat';
+    out[devId] = { thisWeek, lastWeek, deltaPct, direction };
+  }
+  return out;
+}
+
 // ---- Active branches (Phase 3 Step 3) ----
 
 export interface ActiveBranchRow {
