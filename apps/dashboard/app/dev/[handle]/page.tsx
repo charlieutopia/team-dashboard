@@ -20,7 +20,16 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
 
   if (!result) notFound();
 
-  const { developer, days, totals, windowDays, klToday } = result;
+  const {
+    developer,
+    days,
+    totals,
+    windowDays,
+    effectiveWindowDays,
+    isWindowClamped,
+    klToday,
+    earliestDailyReport,
+  } = result;
 
   const onTrackPct = totals.total_days_with_data > 0
     ? Math.round((totals.on_track_days / totals.total_days_with_data) * 100)
@@ -55,7 +64,9 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
         <h1 className="text-xl font-semibold leading-tight">@{developer.github_handle}</h1>
         <p className="text-sm text-gray-600 dark:text-gray-300">{developer.display_name}</p>
         <p className="text-[11px] text-gray-500 mt-1">
-          {windowDays}-day window · ending {klToday}
+          {isWindowClamped
+            ? `${effectiveWindowDays}-day window · since ${earliestDailyReport}`
+            : `${windowDays}-day window · ending ${klToday}`}
         </p>
       </header>
 
@@ -83,15 +94,25 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
         )}
       </section>
 
-      <KpiStrip totals={totals} windowDays={windowDays} />
+      <KpiStrip
+        totals={totals}
+        windowDays={windowDays}
+        effectiveWindowDays={effectiveWindowDays}
+        isWindowClamped={isWindowClamped}
+        earliestDailyReport={earliestDailyReport}
+      />
 
       <section className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-        <p className="text-xs text-gray-500 mb-2">{windowDays}-day trajectory</p>
+        <p className="text-xs text-gray-500 mb-2">
+          {isWindowClamped ? `${effectiveWindowDays}-day` : `${windowDays}-day`} trajectory
+        </p>
         <TrajectoryHeatmap days={heatmapDays} />
       </section>
 
       <section className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-        <p className="text-xs text-gray-500 mb-2">{windowDays}-day totals</p>
+        <p className="text-xs text-gray-500 mb-2">
+          {isWindowClamped ? `${effectiveWindowDays}-day` : `${windowDays}-day`} totals
+        </p>
         <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
           <div>
             <dt className="text-gray-500">Days with data</dt>

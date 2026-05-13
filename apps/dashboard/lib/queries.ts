@@ -162,8 +162,11 @@ export interface DevTimelineResult {
   developer: { id: string; github_handle: string; display_name: string };
   days: DevTimelineDay[];
   totals: DevTimelineTotals;
-  windowDays: number;
+  windowDays: number; // requested window (e.g. 30)
+  effectiveWindowDays: number; // actual length after clamping to data-range floor
+  isWindowClamped: boolean; // true when effectiveWindowDays < windowDays
   klToday: string;
+  earliestDailyReport: string | null; // floor used by the clamp; null if dev has zero daily reports
 }
 
 function shiftKlDate(klToday: string, deltaDays: number): string {
@@ -193,11 +196,38 @@ export async function getDevTimeline(
 
   const developer = devRow as { id: string; github_handle: string; display_name: string };
 
-  // 2. Build the date window: newest-first [klToday, klToday-1, ..., klToday-(windowDays-1)]
+  // 2a. Find the earliest daily_report date for this dev — used to clamp the
+  //     window so KPIs aren't computed against a "should have worked" range
+  //     that predates the daily-report system. Without this, devs with only
+  //     a few days of reports show absurd "Worked 2 of 20 days" headlines.
+  const { data: earliestRow } = await supabase
+    .from('daily_reports')
+    .select('report_date')
+    .eq('developer_id', developer.id)
+    .order('report_date', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const earliestDailyReport =
+    (earliestRow as { report_date: string } | null)?.report_date ?? null;
+
+  // 2b. Build the date window: newest-first. Clamp the start to whichever is
+  //     LATER: (klToday - windowDays + 1) or the earliest daily_report date.
+  //     If the dev has zero daily reports, fall back to the requested window
+  //     (the KPI strip will surface "no data" naturally).
+  const requestedOldest = shiftKlDate(klToday, -(windowDays - 1));
+  const effectiveOldest =
+    earliestDailyReport && earliestDailyReport > requestedOldest
+      ? earliestDailyReport
+      : requestedOldest;
+
   const dateList: string[] = [];
-  for (let i = 0; i < windowDays; i++) {
-    dateList.push(shiftKlDate(klToday, -i));
+  let cursor = klToday;
+  while (cursor >= effectiveOldest) {
+    dateList.push(cursor);
+    cursor = shiftKlDate(cursor, -1);
   }
+  const effectiveWindowDays = dateList.length;
+  const isWindowClamped = effectiveWindowDays < windowDays;
   const oldestDate = dateList[dateList.length - 1]!;
   const newestDate = dateList[0]!;
 
@@ -376,7 +406,16 @@ export async function getDevTimeline(
     ship_pct: shipPct,
   };
 
-  return { developer, days, totals, windowDays, klToday };
+  return {
+    developer,
+    days,
+    totals,
+    windowDays,
+    effectiveWindowDays,
+    isWindowClamped,
+    klToday,
+    earliestDailyReport,
+  };
 }
 
 // ---- Weekly digests (Layer B) ----
