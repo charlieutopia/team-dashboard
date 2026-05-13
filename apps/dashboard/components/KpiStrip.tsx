@@ -22,9 +22,15 @@ function statusBadge(stuckDays: number, shouldHaveWorked: number) {
 export function KpiStrip({
   totals,
   windowDays,
+  effectiveWindowDays,
+  isWindowClamped,
+  earliestDailyReport,
 }: {
   totals: DevTimelineTotals;
   windowDays: number;
+  effectiveWindowDays?: number;
+  isWindowClamped?: boolean;
+  earliestDailyReport?: string | null;
 }) {
   const {
     days_shipped,
@@ -34,11 +40,16 @@ export function KpiStrip({
     stuck_days,
   } = totals;
 
+  const actualDays = effectiveWindowDays ?? windowDays;
   const status = statusBadge(stuck_days, should_have_worked);
+  const headerLabel =
+    isWindowClamped && earliestDailyReport
+      ? `Since ${earliestDailyReport} (${actualDays} days of data so far)`
+      : `Last ${actualDays} days`;
 
   return (
     <section className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-      <p className="text-xs text-gray-500 mb-2">Last {windowDays} days</p>
+      <p className="text-xs text-gray-500 mb-2">{headerLabel}</p>
 
       <div className="flex items-baseline justify-between mb-2">
         <div>
