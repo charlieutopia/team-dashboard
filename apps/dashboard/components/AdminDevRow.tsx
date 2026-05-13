@@ -91,13 +91,13 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
                 (e.target as HTMLInputElement).blur();
               }
             }}
-            className="w-full text-base font-medium bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none py-0.5"
+            className="w-full text-base font-medium text-ink bg-transparent border-b border-transparent hover:border-line-strong focus:border-blue-500 focus:outline-none py-0.5"
             aria-label={`Short name for ${dev.github_handle}`}
             disabled={isPending}
           />
-          <p className="text-xs text-gray-500 mt-0.5">@{dev.github_handle}</p>
+          <p className="text-xs text-ink-faint mt-0.5">@{dev.github_handle}</p>
           {dev.email && (
-            <p className="text-[11px] text-gray-400 mt-0.5 truncate">{dev.email}</p>
+            <p className="text-[11px] text-ink-faint mt-0.5 truncate">{dev.email}</p>
           )}
         </div>
 
@@ -107,7 +107,7 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
             onClick={toggleActive}
             disabled={isPending}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              active ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+              active ? 'bg-green-500' : 'bg-line-strong'
             } ${isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
             aria-label={`Toggle ${dev.display_name} active`}
             aria-pressed={active}
@@ -118,7 +118,7 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
               }`}
             />
           </button>
-          <span className="text-[10px] uppercase tracking-wide text-gray-500">
+          <span className="text-[10px] uppercase tracking-wide text-ink-faint">
             {active ? 'Active' : 'Inactive'}
           </span>
         </div>
@@ -127,7 +127,7 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
       {(nameSave !== 'idle' || activeSave !== 'idle' || errorMsg) && (
         <div className="mt-1.5 text-[11px]">
           {(nameSave === 'saving' || activeSave === 'saving') && (
-            <span className="text-gray-500">Saving…</span>
+            <span className="text-ink-faint">Saving…</span>
           )}
           {(nameSave === 'saved' || activeSave === 'saved') && !errorMsg && (
             <span className="text-green-600">Saved</span>

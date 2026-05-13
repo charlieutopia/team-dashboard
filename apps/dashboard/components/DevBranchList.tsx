@@ -56,12 +56,12 @@ function statusLabel(s: DerivedStatus): { text: string; cls: string } {
     case 'idle':
       return {
         text: `Idle ${s.days}d on ${s.branch.branch_name}`,
-        cls: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
+        cls: 'bg-card-sunken text-ink-muted border-line',
       };
     case 'no_active_branch':
       return {
         text: 'No active branch',
-        cls: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
+        cls: 'bg-card-sunken text-ink-faint border-line',
       };
   }
 }
@@ -102,19 +102,19 @@ export function DevBranchList({ branches }: { branches: ActiveBranchRow[] }) {
                 >
                   {b.branch_name}
                 </a>
-                <span className="text-gray-500">
+                <span className="text-ink-faint">
                   {' '}·{' '}{b.commits_ahead}{' '}commit{b.commits_ahead === 1 ? '' : 's'}
                   {' '}·{' '}{relativeTime(b.last_commit_at)}
                   {' '}·{' '}<span className="text-green-600">+{b.lines_added}</span>
                   {' '}<span className="text-red-600">−{b.lines_removed}</span>
                 </span>
                 {b.last_commit_message && (
-                  <p className="text-[11px] text-gray-600 dark:text-gray-400 truncate ml-0.5">
+                  <p className="text-[11px] text-ink-muted truncate ml-0.5">
                     {firstLine(b.last_commit_message)}
                   </p>
                 )}
                 {repoSegments.length === 2 && repoSegments[1] !== 'utopiaspace' && (
-                  <p className="text-[10px] text-gray-400 ml-0.5">
+                  <p className="text-[10px] text-ink-faint ml-0.5">
                     in {b.repo_full_name}
                   </p>
                 )}

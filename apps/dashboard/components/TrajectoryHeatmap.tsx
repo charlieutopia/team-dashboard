@@ -21,8 +21,8 @@ const COLOR_CLASS_MAP: Record<string, string> = {
   no_activity: 'bg-trajectory-no_activity',
 };
 
-const EMPTY_CLASS = 'bg-gray-200 dark:bg-gray-700';
-const WEEKEND_CLASS = 'bg-gray-100 dark:bg-gray-800';
+const EMPTY_CLASS = 'bg-line';
+const WEEKEND_CLASS = 'bg-card-sunken';
 const HOLIDAY_CLASS = 'bg-yellow-200 dark:bg-yellow-900/60';
 const LEAVE_FULL_CLASS = 'bg-sky-300 dark:bg-sky-700';
 const LEAVE_HALF_CLASS = 'bg-sky-200 dark:bg-sky-800 ring-1 ring-sky-300';
@@ -94,7 +94,7 @@ function Legend() {
     { cls: EMPTY_CLASS, label: 'no report yet' },
   ];
   return (
-    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-500">
+    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-ink-faint">
       {items.map(it => (
         <span key={it.label} className="inline-flex items-center gap-1">
           <span className={`inline-block w-[8px] h-[8px] rounded-sm ${it.cls}`} />

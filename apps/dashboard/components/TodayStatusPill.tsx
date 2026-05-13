@@ -22,11 +22,11 @@ const STATUS_STYLE: Record<
   },
   weekend: {
     label: 'Weekend',
-    cls: 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
+    cls: 'bg-card-sunken text-ink-muted border-line',
   },
   inactive: {
     label: 'Inactive',
-    cls: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-500 dark:border-gray-700 opacity-70',
+    cls: 'bg-card-sunken text-ink-faint border-line opacity-70',
   },
 };
 
