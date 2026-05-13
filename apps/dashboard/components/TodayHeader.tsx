@@ -35,23 +35,28 @@ export function TodayHeader({ today }: { today: TodayStatusResult }) {
 
   const showOffList =
     !isWeekend && !isPublicHoliday && offTodayList.length > 0;
+  const everyoneOff = isWeekend || isPublicHoliday;
 
   return (
-    <section className="px-4 pt-3 pb-3 border-b border-gray-100 dark:border-gray-800">
+    <section
+      className={`px-4 pt-4 pb-4 border-b border-line ${
+        everyoneOff ? 'border-l-4 border-l-amber-400' : ''
+      }`}
+    >
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold">Today · {formatHumanDate(klToday)}</h2>
+        <h2 className="text-sm font-semibold text-ink tracking-tight">Today · {formatHumanDate(klToday)}</h2>
         {counts.inactive > 0 && (
-          <span className="text-[10px] text-gray-400">
+          <span className="text-[10px] text-ink-faint">
             {counts.inactive} inactive
           </span>
         )}
       </div>
-      <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">{summary}</p>
+      <p className="text-xs text-ink-muted mt-1">{summary}</p>
 
       {showOffList && (
-        <div className="mt-2">
-          <p className="text-[11px] text-gray-500 mb-1">Off today</p>
-          <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-700 dark:text-gray-300">
+        <div className="mt-3">
+          <p className="text-[11px] text-ink-faint mb-1 uppercase tracking-wide">Off today</p>
+          <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink-muted">
             {offTodayList.map(d => {
               const reason =
                 d.status === 'half_day_leave' && d.leaveType
@@ -61,8 +66,8 @@ export function TodayHeader({ today }: { today: TodayStatusResult }) {
                     : d.status;
               return (
                 <li key={d.developer_id}>
-                  <span className="font-medium">{d.display_name}</span>
-                  <span className="text-gray-500"> · {reason}</span>
+                  <span className="font-medium text-ink">{d.display_name}</span>
+                  <span className="text-ink-faint"> · {reason}</span>
                 </li>
               );
             })}

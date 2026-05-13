@@ -842,6 +842,8 @@ export interface CadenceEntry {
   lastWeek: number;
   deltaPct: number; // -100 .. +∞; 0 when both weeks empty
   direction: 'up' | 'flat' | 'down' | 'no_data';
+  /** Last 7 days commits per dev, oldest-first (length always 7, missing days = 0). */
+  daily: number[];
 }
 
 export async function getCadenceByDev(
@@ -850,6 +852,11 @@ export async function getCadenceByDev(
   const klToday = computeKlDate(new Date());
   const oldestDay = shiftKlDate(klToday, -13); // last 14 days inclusive
   const thisWeekStart = shiftKlDate(klToday, -6); // last 7 days inclusive
+
+  // Build the 7-day date grid (oldest → newest) so we can pad missing days.
+  const thisWeekDates: string[] = [];
+  for (let i = 6; i >= 0; i--) thisWeekDates.push(shiftKlDate(klToday, -i));
+  const dateIndex = new Map(thisWeekDates.map((d, i) => [d, i]));
 
   const { data, error } = await supabase
     .from('daily_reports')
@@ -860,7 +867,7 @@ export async function getCadenceByDev(
 
   const accum = new Map<
     string,
-    { thisWeek: number; lastWeek: number }
+    { thisWeek: number; lastWeek: number; daily: number[] }
   >();
   for (const row of (data ?? []) as {
     developer_id: string;
@@ -869,20 +876,23 @@ export async function getCadenceByDev(
   }[]) {
     const commits = Number(row.metrics?.commits_today ?? 0);
     const bucket = row.report_date >= thisWeekStart ? 'thisWeek' : 'lastWeek';
-    const existing = accum.get(row.developer_id) ?? { thisWeek: 0, lastWeek: 0 };
+    const existing =
+      accum.get(row.developer_id) ?? { thisWeek: 0, lastWeek: 0, daily: Array(7).fill(0) };
     existing[bucket] += commits;
+    const dayIdx = dateIndex.get(row.report_date);
+    if (dayIdx !== undefined) existing.daily[dayIdx] = commits;
     accum.set(row.developer_id, existing);
   }
 
   const out: Record<string, CadenceEntry> = {};
-  for (const [devId, { thisWeek, lastWeek }] of accum) {
+  for (const [devId, { thisWeek, lastWeek, daily }] of accum) {
     if (thisWeek === 0 && lastWeek === 0) {
-      out[devId] = { thisWeek: 0, lastWeek: 0, deltaPct: 0, direction: 'no_data' };
+      out[devId] = { thisWeek: 0, lastWeek: 0, deltaPct: 0, direction: 'no_data', daily };
       continue;
     }
     if (lastWeek === 0) {
       // Anything-vs-zero is unbounded; treat as up.
-      out[devId] = { thisWeek, lastWeek: 0, deltaPct: 100, direction: 'up' };
+      out[devId] = { thisWeek, lastWeek: 0, deltaPct: 100, direction: 'up', daily };
       continue;
     }
     const deltaPct = Math.round(((thisWeek - lastWeek) / lastWeek) * 100);
@@ -890,7 +900,7 @@ export async function getCadenceByDev(
     if (deltaPct > 20) direction = 'up';
     else if (deltaPct < -20) direction = 'down';
     else direction = 'flat';
-    out[devId] = { thisWeek, lastWeek, deltaPct, direction };
+    out[devId] = { thisWeek, lastWeek, deltaPct, direction, daily };
   }
   return out;
 }
