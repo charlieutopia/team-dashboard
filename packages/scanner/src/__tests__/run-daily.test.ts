@@ -19,9 +19,21 @@ interface MockBranch {
   sha: string;
 }
 
+interface MockPr {
+  number: number;
+  title: string;
+  html_url: string;
+  draft?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  author: string;
+}
+
 interface MockOctokitOpts {
   branches: MockBranch[];
   diffByBranch: Record<string, DiffByBranch>;
+  /** PRs returned by search.issuesAndPullRequests, keyed by author handle */
+  prsByAuthor?: Record<string, MockPr[]>;
 }
 
 function makeMockOctokit(opts: MockOctokitOpts) {
@@ -73,6 +85,27 @@ function makeMockOctokit(opts: MockOctokitOpts) {
     })();
   });
 
+  // Phase 3 Step 4: search.issuesAndPullRequests for PR sync.
+  // Mock parses the q="is:pr is:open author:X repo:Y" string to find author.
+  const issuesAndPullRequests = vi.fn(async ({ q }: { q: string }) => {
+    const authorMatch = /author:(\S+)/.exec(q);
+    const author = authorMatch ? authorMatch[1] : null;
+    if (!author) return { data: { items: [] } } as any;
+    const prs = (opts.prsByAuthor ?? {})[author] ?? [];
+    return {
+      data: {
+        items: prs.map((p) => ({
+          number: p.number,
+          title: p.title,
+          html_url: p.html_url,
+          draft: p.draft ?? false,
+          created_at: p.created_at ?? null,
+          updated_at: p.updated_at ?? null,
+        })),
+      },
+    } as any;
+  });
+
   return {
     paginate: { iterator: paginateIterator },
     repos: {
@@ -81,6 +114,9 @@ function makeMockOctokit(opts: MockOctokitOpts) {
       getBranch,
       compareCommits,
       getContent,
+    },
+    search: {
+      issuesAndPullRequests,
     },
   } as any;
 }
@@ -94,6 +130,8 @@ function makeMockSb(cfg: MockSbConfig = {}) {
   const upsertCalls: { table: string; row: any; opts: any }[] = [];
   const branchInsertCalls: any[][] = [];
   const branchDeleteCalls: { in: { col: string; vals: string[] } }[] = [];
+  const prInsertCalls: any[][] = [];
+  const prDeleteCalls: { in: { col: string; vals: string[] } }[] = [];
   const trackedRepos = cfg.trackedRepos ?? [
     { id: REPO_ID, full_name: REPO_FULL, spec_module: SPEC_MODULE },
   ];
@@ -115,14 +153,17 @@ function makeMockSb(cfg: MockSbConfig = {}) {
           // Two access patterns:
           // (a) .select("id, display_name").eq("github_handle", X).maybeSingle()
           //     for resolving a handle to a developer row
-          // (b) .select("id").eq("active", true) — returns all active devs (used
-          //     by the developer_active_branches sync step)
+          // (b) .select("id, github_handle").eq("active", true) — returns all
+          //     active devs (used by the active-branches + open-PRs sync steps)
           const eqFn = vi.fn((col: string, val: any) => {
             if (col === "active") {
-              const ids = Object.values(developersByHandle).map((r) => ({
-                id: (r as { id: string }).id,
-              }));
-              return Promise.resolve({ data: ids, error: null });
+              const rows = Object.entries(developersByHandle).map(
+                ([handle, r]) => ({
+                  id: (r as { id: string }).id,
+                  github_handle: handle,
+                }),
+              );
+              return Promise.resolve({ data: rows, error: null });
             }
             // Default: handle-resolve path
             return {
@@ -161,6 +202,20 @@ function makeMockSb(cfg: MockSbConfig = {}) {
         }),
       };
     }
+    if (table === "developer_open_prs") {
+      return {
+        delete: vi.fn(() => ({
+          in: vi.fn((col: string, vals: string[]) => {
+            prDeleteCalls.push({ in: { col, vals } });
+            return Promise.resolve({ data: null, error: null });
+          }),
+        })),
+        insert: vi.fn((rows: any[]) => {
+          prInsertCalls.push(rows);
+          return Promise.resolve({ data: null, error: null });
+        }),
+      };
+    }
     throw new Error(`unexpected table: ${table}`);
   });
 
@@ -169,6 +224,8 @@ function makeMockSb(cfg: MockSbConfig = {}) {
     upsertCalls,
     branchInsertCalls,
     branchDeleteCalls,
+    prInsertCalls,
+    prDeleteCalls,
   };
 }
 
@@ -227,6 +284,7 @@ describe("runDaily", () => {
       reports_failed: 0,
       skipped_no_developer: 0,
       branches_synced: 1,
+      prs_synced: 0,
     });
     expect(analyze).toHaveBeenCalledTimes(1);
     expect(upsertCalls).toHaveLength(1);
@@ -309,6 +367,7 @@ describe("runDaily", () => {
       reports_failed: 0,
       skipped_no_developer: 1,
       branches_synced: 0,
+      prs_synced: 0,
     });
     expect(analyze).not.toHaveBeenCalled();
     expect(upsertCalls).toHaveLength(0);
@@ -352,6 +411,7 @@ describe("runDaily", () => {
       reports_failed: 0,
       skipped_no_developer: 0,
       branches_synced: 2,
+      prs_synced: 0,
     });
     expect(analyze).toHaveBeenCalledTimes(2);
     expect(upsertCalls).toHaveLength(2);
@@ -467,5 +527,69 @@ describe("runDaily", () => {
     const bob = inserted.find((r: any) => r.developer_id === "dev-bob")!;
     expect(bob.branch_name).toBe("fix/b");
     expect(bob.files_changed).toBe(1);
+  });
+
+  it("developer_open_prs sync: deletes for active devs + inserts per-PR payload", async () => {
+    const { sb, prInsertCalls, prDeleteCalls } = makeMockSb({
+      developersByHandle: {
+        alice: { id: "dev-alice" },
+        bob: { id: "dev-bob" },
+      },
+    });
+    const octokit = makeMockOctokit({
+      branches: [{ name: "feat/a", sha: "head-a" }],
+      diffByBranch: {
+        "feat/a": {
+          files: [],
+          commits: [{ sha: "c1", message: "wip", author_login: "alice" }],
+        },
+      },
+      prsByAuthor: {
+        alice: [
+          {
+            number: 42,
+            title: "feat: ship the thing",
+            html_url: "https://github.com/utopiabuilder/utopiaspace/pull/42",
+            draft: false,
+            updated_at: "2026-05-12T10:00:00Z",
+            created_at: "2026-05-10T10:00:00Z",
+            author: "alice",
+          },
+          {
+            number: 43,
+            title: "wip: draft prep",
+            html_url: "https://github.com/utopiabuilder/utopiaspace/pull/43",
+            draft: true,
+            updated_at: "2026-05-13T10:00:00Z",
+            created_at: "2026-05-13T10:00:00Z",
+            author: "alice",
+          },
+        ],
+        // bob: no PRs
+      },
+    });
+    const analyze = vi.fn(async (input) => validReport(input.developer_handle));
+
+    const result = await runDaily({
+      sb,
+      octokit,
+      analyze,
+      klDate: KL_DATE,
+    });
+
+    expect(result.prs_synced).toBe(2);
+    expect(prDeleteCalls).toHaveLength(1);
+    expect(prDeleteCalls[0]!.in.col).toBe("developer_id");
+    expect(prDeleteCalls[0]!.in.vals.sort()).toEqual(["dev-alice", "dev-bob"]);
+    expect(prInsertCalls).toHaveLength(1);
+    const inserted = prInsertCalls[0]!;
+    expect(inserted).toHaveLength(2);
+    const open = inserted.find((r: any) => r.pr_number === 42)!;
+    expect(open.developer_id).toBe("dev-alice");
+    expect(open.pr_state).toBe("open");
+    expect(open.pr_title).toBe("feat: ship the thing");
+    expect(open.repo_full_name).toBe(REPO_FULL);
+    const draft = inserted.find((r: any) => r.pr_number === 43)!;
+    expect(draft.pr_state).toBe("draft");
   });
 });
