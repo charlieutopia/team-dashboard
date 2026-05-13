@@ -29,12 +29,20 @@ export default async function HomePage() {
         </p>
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold">Team Report</h1>
-          <Link
-            href="/week"
-            className="text-xs text-blue-600 hover:text-blue-700 whitespace-nowrap"
-          >
-            This week →
-          </Link>
+          <div className="flex items-center gap-3 text-xs whitespace-nowrap">
+            <Link
+              href="/admin/team"
+              className="text-blue-600 hover:text-blue-700"
+            >
+              Manage team
+            </Link>
+            <Link
+              href="/week"
+              className="text-blue-600 hover:text-blue-700"
+            >
+              This week →
+            </Link>
+          </div>
         </div>
         {rows.length > 0 && (
           <p className="text-xs text-gray-500 mt-1">
