@@ -595,6 +595,197 @@ export async function getDevMonthlyDigest(
   };
 }
 
+// ---- Today status (Phase 3 Step 1) ----
+
+export type TodayStatus =
+  | 'working'
+  | 'on_leave'
+  | 'half_day_leave'
+  | 'public_holiday'
+  | 'weekend'
+  | 'inactive';
+
+export interface TodayDevStatus {
+  developer_id: string;
+  github_handle: string;
+  display_name: string;
+  status: TodayStatus;
+  leaveType: string | null;
+  isHalfDay: boolean;
+  halfSegment: string | null;
+  holidayName: string | null;
+}
+
+export interface TodayStatusResult {
+  klToday: string;
+  isWeekend: boolean;
+  isPublicHoliday: boolean;
+  holidayName: string | null;
+  /** keyed by developer_id; ACTIVE devs only */
+  perDev: Record<string, TodayDevStatus>;
+  /** keyed by github_handle; convenience for DevList lookup */
+  perHandle: Record<string, TodayDevStatus>;
+  counts: {
+    working: number;
+    onLeave: number;
+    halfDay: number;
+    publicHoliday: number;
+    weekend: number;
+    inactive: number;
+    totalActive: number;
+  };
+  /** Active devs whose status !== 'working' — for the header's off-today list */
+  offTodayList: TodayDevStatus[];
+}
+
+export async function getTodayStatus(
+  supabase: SupabaseClient,
+): Promise<TodayStatusResult> {
+  const klToday = computeKlDate(new Date());
+  const dayOfWeek = new Date(klToday + 'T00:00:00Z').getUTCDay(); // 0=Sun, 6=Sat
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+  // 3 parallel queries — devs + today's leave + today's holiday
+  const [devsRes, leavesRes, holidaysRes] = await Promise.all([
+    supabase
+      .from('developers')
+      .select('id, github_handle, display_name, active'),
+    supabase
+      .from('developer_leave_days')
+      .select('developer_id, leave_type, is_half_day, half_segment')
+      .eq('leave_date', klToday),
+    supabase
+      .from('public_holidays')
+      .select('name')
+      .eq('state', 'KL')
+      .eq('holiday_date', klToday),
+  ]);
+
+  if (devsRes.error) throw devsRes.error;
+  if (leavesRes.error) throw leavesRes.error;
+  if (holidaysRes.error) throw holidaysRes.error;
+
+  const allDevs = (devsRes.data ?? []) as {
+    id: string;
+    github_handle: string;
+    display_name: string;
+    active: boolean;
+  }[];
+  const leaveByDevId = new Map<
+    string,
+    { leave_type: string; is_half_day: boolean; half_segment: string | null }
+  >();
+  for (const l of (leavesRes.data ?? []) as {
+    developer_id: string;
+    leave_type: string;
+    is_half_day: boolean;
+    half_segment: string | null;
+  }[]) {
+    leaveByDevId.set(l.developer_id, {
+      leave_type: l.leave_type,
+      is_half_day: l.is_half_day,
+      half_segment: l.half_segment,
+    });
+  }
+  const holidayRows = (holidaysRes.data ?? []) as { name: string }[];
+  const isPublicHoliday = holidayRows.length > 0;
+  const holidayName = isPublicHoliday ? holidayRows[0]!.name : null;
+
+  const perDev: Record<string, TodayDevStatus> = {};
+  const perHandle: Record<string, TodayDevStatus> = {};
+  const counts = {
+    working: 0,
+    onLeave: 0,
+    halfDay: 0,
+    publicHoliday: 0,
+    weekend: 0,
+    inactive: 0,
+    totalActive: 0,
+  };
+
+  for (const dev of allDevs) {
+    if (!dev.active) {
+      counts.inactive += 1;
+      const inactiveEntry: TodayDevStatus = {
+        developer_id: dev.id,
+        github_handle: dev.github_handle,
+        display_name: dev.display_name,
+        status: 'inactive',
+        leaveType: null,
+        isHalfDay: false,
+        halfSegment: null,
+        holidayName: null,
+      };
+      perDev[dev.id] = inactiveEntry;
+      perHandle[dev.github_handle] = inactiveEntry;
+      continue;
+    }
+    counts.totalActive += 1;
+
+    let status: TodayStatus;
+    let leaveType: string | null = null;
+    let isHalfDay = false;
+    let halfSegment: string | null = null;
+    let devHolidayName: string | null = null;
+
+    // Precedence: weekend > public_holiday > leave > working
+    if (isWeekend) {
+      status = 'weekend';
+      counts.weekend += 1;
+    } else if (isPublicHoliday) {
+      status = 'public_holiday';
+      devHolidayName = holidayName;
+      counts.publicHoliday += 1;
+    } else {
+      const leave = leaveByDevId.get(dev.id);
+      if (leave) {
+        if (leave.is_half_day) {
+          status = 'half_day_leave';
+          counts.halfDay += 1;
+        } else {
+          status = 'on_leave';
+          counts.onLeave += 1;
+        }
+        leaveType = leave.leave_type;
+        isHalfDay = leave.is_half_day;
+        halfSegment = leave.half_segment;
+      } else {
+        status = 'working';
+        counts.working += 1;
+      }
+    }
+
+    const entry: TodayDevStatus = {
+      developer_id: dev.id,
+      github_handle: dev.github_handle,
+      display_name: dev.display_name,
+      status,
+      leaveType,
+      isHalfDay,
+      halfSegment,
+      holidayName: devHolidayName,
+    };
+    perDev[dev.id] = entry;
+    perHandle[dev.github_handle] = entry;
+  }
+
+  // off-today excludes inactive (they're not "off today" — they're off the team)
+  const offTodayList = Object.values(perDev)
+    .filter(d => d.status !== 'working' && d.status !== 'inactive')
+    .sort((a, b) => a.display_name.localeCompare(b.display_name));
+
+  return {
+    klToday,
+    isWeekend,
+    isPublicHoliday,
+    holidayName,
+    perDev,
+    perHandle,
+    counts,
+    offTodayList,
+  };
+}
+
 export async function getDriftFindings(supabase: SupabaseClient, developerId: string, reportDate: string) {
   const { data, error } = await supabase
     .from('drift_findings')

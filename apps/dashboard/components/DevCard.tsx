@@ -1,10 +1,17 @@
 import Link from 'next/link';
 import { TrajectoryDot } from './TrajectoryDot';
-import type { DevReportRow } from '@/lib/queries';
+import { TodayStatusPill } from './TodayStatusPill';
+import type { DevReportRow, TodayDevStatus } from '@/lib/queries';
 
-export function DevCard({ report }: { report: DevReportRow }) {
+export function DevCard({
+  report,
+  todayStatus,
+}: {
+  report: DevReportRow;
+  todayStatus?: TodayDevStatus;
+}) {
   if (report.parse_failed) {
-    return <FailedCard report={report} />;
+    return <FailedCard report={report} todayStatus={todayStatus} />;
   }
 
   const m = report.metrics ?? {};
@@ -21,8 +28,11 @@ export function DevCard({ report }: { report: DevReportRow }) {
         <span aria-hidden className="absolute top-3 right-3 text-gray-400 text-sm">→</span>
         <header className="flex items-center gap-3 mb-3">
           <TrajectoryDot trajectory={report.trajectory} />
-          <div>
-            <h2 className="text-base font-semibold leading-tight">{report.display_name}</h2>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base font-semibold leading-tight">{report.display_name}</h2>
+              {todayStatus && <TodayStatusPill status={todayStatus} />}
+            </div>
             <p className="text-xs text-gray-500">@{report.developer_handle}</p>
           </div>
         </header>
@@ -57,7 +67,13 @@ export function DevCard({ report }: { report: DevReportRow }) {
   );
 }
 
-function FailedCard({ report }: { report: DevReportRow }) {
+function FailedCard({
+  report,
+  todayStatus,
+}: {
+  report: DevReportRow;
+  todayStatus?: TodayDevStatus;
+}) {
   return (
     <Link
       href={`/dev/${report.developer_handle}`}
@@ -68,8 +84,11 @@ function FailedCard({ report }: { report: DevReportRow }) {
         <span aria-hidden className="absolute top-3 right-3 text-gray-400 text-sm">→</span>
         <header className="flex items-center gap-3 mb-2">
           <span className="inline-block w-3 h-3 rounded-full bg-red-400" aria-label="failed" />
-          <div>
-            <h2 className="text-base font-semibold leading-tight">{report.display_name}</h2>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base font-semibold leading-tight">{report.display_name}</h2>
+              {todayStatus && <TodayStatusPill status={todayStatus} />}
+            </div>
             <p className="text-xs text-gray-500">@{report.developer_handle}</p>
           </div>
         </header>

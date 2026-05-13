@@ -1,13 +1,17 @@
 import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { getLatestReports } from '@/lib/queries';
+import { getLatestReports, getTodayStatus } from '@/lib/queries';
 import { DevList } from '@/components/DevList';
+import { TodayHeader } from '@/components/TodayHeader';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const supabase = createSupabaseServerClient();
-  const { reportDate, klToday, rows } = await getLatestReports(supabase);
+  const [{ reportDate, klToday, rows }, today] = await Promise.all([
+    getLatestReports(supabase),
+    getTodayStatus(supabase),
+  ]);
 
   const isStale = reportDate !== null && reportDate < klToday;
   const succeededCount = rows.filter(r => !r.parse_failed).length;
@@ -39,13 +43,15 @@ export default async function HomePage() {
         )}
       </header>
 
+      <TodayHeader today={today} />
+
       {rows.length === 0 ? (
         <div className="px-6 py-12 text-center text-sm text-gray-500">
           <p className="mb-2">No reports available.</p>
           <p>Run <code className="font-mono">pnpm scanner:daily</code> locally to generate today&apos;s reports.</p>
         </div>
       ) : (
-        <DevList rows={rows} />
+        <DevList rows={rows} todayStatusByDev={today.perDev} />
       )}
     </main>
   );
