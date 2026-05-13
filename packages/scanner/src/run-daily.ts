@@ -305,22 +305,46 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
       }
     }
 
-    const branchInserts = resolved.flatMap((dev) =>
-      dev.branches.map((b) => ({
-        developer_id: dev.developer_id,
-        repo_full_name: b.repo_full_name,
-        branch_name: b.branch_name,
-        head_sha: b.head_sha,
-        base_sha: b.base_sha,
-        last_commit_at: b.last_commit_at,
-        last_commit_message: b.last_commit_message,
-        last_commit_author: b.last_commit_author,
-        commits_ahead: b.commits_ahead,
-        lines_added: b.lines_added,
-        lines_removed: b.lines_removed,
-        files_changed: b.files_changed,
-      })),
-    );
+    // Dedupe by (developer_id, repo_full_name, branch_name) — the unique
+    // constraint on developer_active_branches. Source of duplicates is
+    // unstable: GH paginate.iterator can return overlapping pages, and an
+    // upstream code path may push the same branch twice if a dev has multiple
+    // commit authorships on the same branch. Last-write-wins keeps the freshest
+    // payload per unique key.
+    const branchInsertMap = new Map<string, {
+      developer_id: string;
+      repo_full_name: string;
+      branch_name: string;
+      head_sha: string;
+      base_sha: string;
+      last_commit_at: string | null;
+      last_commit_message: string | null;
+      last_commit_author: string | null;
+      commits_ahead: number;
+      lines_added: number;
+      lines_removed: number;
+      files_changed: number;
+    }>();
+    for (const dev of resolved) {
+      for (const b of dev.branches) {
+        const key = `${dev.developer_id}|${b.repo_full_name}|${b.branch_name}`;
+        branchInsertMap.set(key, {
+          developer_id: dev.developer_id,
+          repo_full_name: b.repo_full_name,
+          branch_name: b.branch_name,
+          head_sha: b.head_sha,
+          base_sha: b.base_sha,
+          last_commit_at: b.last_commit_at,
+          last_commit_message: b.last_commit_message,
+          last_commit_author: b.last_commit_author,
+          commits_ahead: b.commits_ahead,
+          lines_added: b.lines_added,
+          lines_removed: b.lines_removed,
+          files_changed: b.files_changed,
+        });
+      }
+    }
+    const branchInserts = [...branchInsertMap.values()];
     if (branchInserts.length > 0) {
       const insRes = await sb
         .from("developer_active_branches")
@@ -361,7 +385,10 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
       pr_created_at: string | null;
       pr_updated_at: string | null;
     }
-    const prInserts: PrInsertRow[] = [];
+    // Dedupe by the unique constraint columns (developer_id, repo, pr_number)
+    // for the same reason as branches above — defensive against overlapping
+    // search-API pages or upstream reshuffles.
+    const prInsertMap = new Map<string, PrInsertRow>();
     for (const dev of activeDevs) {
       for (const repo of trackedRepos) {
         try {
@@ -371,7 +398,8 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
             dev.github_handle,
           );
           for (const pr of prs) {
-            prInserts.push({
+            const key = `${dev.id}|${repo.full_name}|${pr.pr_number}`;
+            prInsertMap.set(key, {
               developer_id: dev.id,
               repo_full_name: repo.full_name,
               pr_number: pr.pr_number,
@@ -390,6 +418,7 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
         }
       }
     }
+    const prInserts = [...prInsertMap.values()];
     if (prInserts.length > 0) {
       const insPrs = await sb.from("developer_open_prs").insert(prInserts);
       if (insPrs.error) {
