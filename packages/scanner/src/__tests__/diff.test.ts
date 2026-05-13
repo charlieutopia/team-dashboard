@@ -21,7 +21,12 @@ describe("getDiffBetweenCommits", () => {
       "abc123",
     );
 
-    expect(result).toEqual({ files: [], commits: [] });
+    expect(result).toEqual({
+      files: [],
+      commits: [],
+      total_additions: 0,
+      total_deletions: 0,
+    });
     expect(mockOctokit.repos.compareCommits).not.toHaveBeenCalled();
   });
 
@@ -43,15 +48,22 @@ describe("getDiffBetweenCommits", () => {
         commits: [
           {
             sha: "commit1",
-            commit: { message: "feat: add feature" },
+            commit: {
+              message: "feat: add feature",
+              author: { date: "2026-05-12T10:00:00Z" },
+            },
             author: { login: "alice" },
           },
           {
             sha: "commit2",
-            commit: { message: "fix: bug fix" },
+            commit: {
+              message: "fix: bug fix",
+              author: { date: "2026-05-13T08:00:00Z" },
+            },
             author: null,
           },
         ],
+        stats: { additions: 12, deletions: 3 },
       } as any,
     } as any);
 
@@ -73,8 +85,12 @@ describe("getDiffBetweenCommits", () => {
       sha: "commit1",
       message: "feat: add feature",
       author_login: "alice",
+      committed_at: "2026-05-12T10:00:00Z",
     });
     expect(result.commits[1]?.author_login).toBeNull();
+    expect(result.commits[1]?.committed_at).toBe("2026-05-13T08:00:00Z");
+    expect(result.total_additions).toBe(12);
+    expect(result.total_deletions).toBe(3);
   });
 
   it("handles missing patch gracefully", async () => {

@@ -786,6 +786,62 @@ export async function getTodayStatus(
   };
 }
 
+// ---- Active branches (Phase 3 Step 3) ----
+
+export interface ActiveBranchRow {
+  id: string;
+  developer_id: string;
+  repo_full_name: string;
+  branch_name: string;
+  head_sha: string;
+  base_sha: string;
+  last_commit_at: string | null;
+  last_commit_message: string | null;
+  last_commit_author: string | null;
+  commits_ahead: number;
+  lines_added: number;
+  lines_removed: number;
+  files_changed: number;
+  captured_at: string;
+}
+
+export async function getActiveBranchesByDev(
+  supabase: SupabaseClient,
+): Promise<{
+  /** keyed by developer_id; entries exist for all active devs (empty array if no active branches) */
+  byDev: Record<string, ActiveBranchRow[]>;
+  /** true iff the developer_active_branches table has at least one row globally — used to decide whether to render the per-card branch section at all (pre-bootstrap suppresses it) */
+  populated: boolean;
+}> {
+  const [activeDevsRes, branchesRes] = await Promise.all([
+    supabase.from('developers').select('id').eq('active', true),
+    supabase
+      .from('developer_active_branches')
+      .select(
+        'id, developer_id, repo_full_name, branch_name, head_sha, base_sha, last_commit_at, last_commit_message, last_commit_author, commits_ahead, lines_added, lines_removed, files_changed, captured_at',
+      )
+      .order('last_commit_at', { ascending: false, nullsFirst: false }),
+  ]);
+
+  if (activeDevsRes.error) throw activeDevsRes.error;
+  if (branchesRes.error) throw branchesRes.error;
+
+  const byDev: Record<string, ActiveBranchRow[]> = {};
+  for (const row of (activeDevsRes.data ?? []) as { id: string }[]) {
+    byDev[row.id] = [];
+  }
+  for (const row of (branchesRes.data ?? []) as ActiveBranchRow[]) {
+    const existing = byDev[row.developer_id];
+    if (existing) {
+      existing.push(row);
+    } else {
+      // Fallback for devs marked inactive after their branches were synced.
+      byDev[row.developer_id] = [row];
+    }
+  }
+  return { byDev, populated: (branchesRes.data ?? []).length > 0 };
+}
+
 export async function getDriftFindings(supabase: SupabaseClient, developerId: string, reportDate: string) {
   const { data, error } = await supabase
     .from('drift_findings')

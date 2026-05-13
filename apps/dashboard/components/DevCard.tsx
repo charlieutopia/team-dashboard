@@ -1,17 +1,20 @@
 import Link from 'next/link';
 import { TrajectoryDot } from './TrajectoryDot';
 import { TodayStatusPill } from './TodayStatusPill';
-import type { DevReportRow, TodayDevStatus } from '@/lib/queries';
+import { DevBranchList } from './DevBranchList';
+import type { ActiveBranchRow, DevReportRow, TodayDevStatus } from '@/lib/queries';
 
 export function DevCard({
   report,
   todayStatus,
+  branches,
 }: {
   report: DevReportRow;
   todayStatus?: TodayDevStatus;
+  branches?: ActiveBranchRow[];
 }) {
   if (report.parse_failed) {
-    return <FailedCard report={report} todayStatus={todayStatus} />;
+    return <FailedCard report={report} todayStatus={todayStatus} branches={branches} />;
   }
 
   const m = report.metrics ?? {};
@@ -59,6 +62,8 @@ export function DevCard({
         </p>
       </Link>
 
+      {branches && <DevBranchList branches={branches} />}
+
       <details className="mt-3">
         <summary className="text-xs text-blue-600 cursor-pointer select-none hover:text-blue-700">Tap to expand</summary>
         <ExpandedSection report={report} />
@@ -70,17 +75,19 @@ export function DevCard({
 function FailedCard({
   report,
   todayStatus,
+  branches,
 }: {
   report: DevReportRow;
   todayStatus?: TodayDevStatus;
+  branches?: ActiveBranchRow[];
 }) {
   return (
-    <Link
-      href={`/dev/${report.developer_handle}`}
-      className="block active:opacity-80 transition"
-      aria-label={`View ${report.display_name}'s timeline`}
-    >
-      <article className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-4 mb-3 mx-3 shadow-sm relative">
+    <article className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-4 mb-3 mx-3 shadow-sm relative">
+      <Link
+        href={`/dev/${report.developer_handle}`}
+        className="block -m-4 mb-0 p-4 pb-0 rounded-t-xl active:opacity-80 transition"
+        aria-label={`View ${report.display_name}'s timeline`}
+      >
         <span aria-hidden className="absolute top-3 right-3 text-gray-400 text-sm">→</span>
         <header className="flex items-center gap-3 mb-2">
           <span className="inline-block w-3 h-3 rounded-full bg-red-400" aria-label="failed" />
@@ -100,8 +107,9 @@ function FailedCard({
             {report.error_msg}
           </p>
         )}
-      </article>
-    </Link>
+      </Link>
+      {branches && <DevBranchList branches={branches} />}
+    </article>
   );
 }
 

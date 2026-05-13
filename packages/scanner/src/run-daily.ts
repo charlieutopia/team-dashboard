@@ -24,6 +24,7 @@ export interface RunDailyResult {
   reports_succeeded: number;
   reports_failed: number;
   skipped_no_developer: number;
+  branches_synced: number;
 }
 
 interface BranchPayload {
@@ -31,6 +32,15 @@ interface BranchPayload {
   head_sha: string;
   base_sha: string;
   diff_text: string;
+  // Phase 3 Step 3 — fields for developer_active_branches sync
+  repo_full_name: string;
+  last_commit_at: string | null;
+  last_commit_message: string | null;
+  last_commit_author: string | null;
+  commits_ahead: number;
+  lines_added: number;
+  lines_removed: number;
+  files_changed: number;
 }
 
 interface TrackedRepoRow {
@@ -73,6 +83,7 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
     reports_succeeded: 0,
     reports_failed: 0,
     skipped_no_developer: 0,
+    branches_synced: 0,
   };
 
   // 1. Read tracked repos
@@ -128,16 +139,24 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
         branch.head_sha,
       );
       const lastCommit = snapshot.commits[snapshot.commits.length - 1];
-      const handle = lastCommit?.author_login ?? null;
-      if (!handle) {
+      if (!lastCommit || !lastCommit.author_login) {
         // No author we can attribute to — skip.
         continue;
       }
+      const handle = lastCommit.author_login;
       const payload: BranchPayload = {
         branch_name: branch.branch_name,
         head_sha: branch.head_sha,
         base_sha: baseSha,
         diff_text: buildDiffText(snapshot.files),
+        repo_full_name: repo.full_name,
+        last_commit_at: lastCommit.committed_at,
+        last_commit_message: lastCommit.message,
+        last_commit_author: lastCommit.author_login,
+        commits_ahead: snapshot.commits.length,
+        lines_added: snapshot.total_additions,
+        lines_removed: snapshot.total_deletions,
+        files_changed: snapshot.files.length,
       };
       const existing = branchesByHandle.get(handle);
       if (existing) {
@@ -251,6 +270,62 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
         );
       }
       counters.reports_succeeded += 1;
+    }
+  }
+
+  // 7. Sync developer_active_branches (Phase 3 Step 3).
+  // Pattern: clear all rows for active developers + insert fresh rows for the
+  // ones with branches today. Devs whose branch count went N→0 today have
+  // their stale rows cleared; devs with M→K rows have the table reflect K.
+  const activeDevsRes = await sb
+    .from("developers")
+    .select("id")
+    .eq("active", true);
+  if (activeDevsRes.error) {
+    console.error(
+      `developer_active_branches sync — failed to list active devs: ${activeDevsRes.error.message}`,
+    );
+  } else {
+    const activeDevIds = (activeDevsRes.data ?? []).map((r) => (r as { id: string }).id);
+    if (activeDevIds.length > 0) {
+      const delRes = await sb
+        .from("developer_active_branches")
+        .delete()
+        .in("developer_id", activeDevIds);
+      if (delRes.error) {
+        console.error(
+          `developer_active_branches sync — delete failed: ${delRes.error.message}`,
+        );
+      }
+    }
+
+    const branchInserts = resolved.flatMap((dev) =>
+      dev.branches.map((b) => ({
+        developer_id: dev.developer_id,
+        repo_full_name: b.repo_full_name,
+        branch_name: b.branch_name,
+        head_sha: b.head_sha,
+        base_sha: b.base_sha,
+        last_commit_at: b.last_commit_at,
+        last_commit_message: b.last_commit_message,
+        last_commit_author: b.last_commit_author,
+        commits_ahead: b.commits_ahead,
+        lines_added: b.lines_added,
+        lines_removed: b.lines_removed,
+        files_changed: b.files_changed,
+      })),
+    );
+    if (branchInserts.length > 0) {
+      const insRes = await sb
+        .from("developer_active_branches")
+        .insert(branchInserts);
+      if (insRes.error) {
+        console.error(
+          `developer_active_branches sync — insert failed: ${insRes.error.message}`,
+        );
+      } else {
+        counters.branches_synced = branchInserts.length;
+      }
     }
   }
 
