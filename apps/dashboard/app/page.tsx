@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { getLatestReports, getTodayStatus } from '@/lib/queries';
+import {
+  getActiveBranchesByDev,
+  getLatestReports,
+  getTodayStatus,
+} from '@/lib/queries';
 import { DevList } from '@/components/DevList';
 import { TodayHeader } from '@/components/TodayHeader';
 
@@ -8,10 +12,14 @@ export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const supabase = createSupabaseServerClient();
-  const [{ reportDate, klToday, rows }, today] = await Promise.all([
+  const [{ reportDate, klToday, rows }, today, branches] = await Promise.all([
     getLatestReports(supabase),
     getTodayStatus(supabase),
+    getActiveBranchesByDev(supabase),
   ]);
+  // Suppress per-card branch section pre-bootstrap (table empty) so we don't
+  // mislead Boss with "No active branch" before the scanner has ever run.
+  const branchesByDev = branches.populated ? branches.byDev : undefined;
 
   const isStale = reportDate !== null && reportDate < klToday;
   const succeededCount = rows.filter(r => !r.parse_failed).length;
@@ -59,7 +67,7 @@ export default async function HomePage() {
           <p>Run <code className="font-mono">pnpm scanner:daily</code> locally to generate today&apos;s reports.</p>
         </div>
       ) : (
-        <DevList rows={rows} todayStatusByDev={today.perDev} />
+        <DevList rows={rows} todayStatusByDev={today.perDev} branchesByDev={branchesByDev} />
       )}
     </main>
   );

@@ -2,14 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import { DevCard } from './DevCard';
-import type { DevReportRow, TodayDevStatus } from '@/lib/queries';
+import type { ActiveBranchRow, DevReportRow, TodayDevStatus } from '@/lib/queries';
 
 export function DevList({
   rows,
   todayStatusByDev,
+  branchesByDev,
 }: {
   rows: DevReportRow[];
   todayStatusByDev?: Record<string, TodayDevStatus>;
+  branchesByDev?: Record<string, ActiveBranchRow[]>;
 }) {
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
@@ -64,6 +66,7 @@ export function DevList({
               key={r.developer_id}
               report={r}
               todayStatus={todayStatusByDev?.[r.developer_id]}
+              branches={branchesByDev?.[r.developer_id]}
             />
           ))}
         </div>
