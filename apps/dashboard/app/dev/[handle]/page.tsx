@@ -54,41 +54,41 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
 
   return (
     <main className="min-h-screen pb-8">
-      <header className="px-4 pt-6 pb-4 sticky top-0 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur z-10">
+      <header className="px-4 pt-6 pb-4 sticky top-0 bg-app/85 backdrop-blur z-10 border-b border-line">
         <Link
           href="/"
           className="text-xs text-blue-600 hover:text-blue-700 inline-block mb-2"
         >
           ← back to all
         </Link>
-        <h1 className="text-xl font-semibold leading-tight">@{developer.github_handle}</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-300">{developer.display_name}</p>
-        <p className="text-[11px] text-gray-500 mt-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">@{developer.github_handle}</h1>
+        <p className="text-sm text-ink-muted">{developer.display_name}</p>
+        <p className="text-[11px] text-ink-faint mt-1">
           {isWindowClamped
             ? `${effectiveWindowDays}-day window · since ${earliestDailyReport}`
             : `${windowDays}-day window · ending ${klToday}`}
         </p>
       </header>
 
-      <section className="border-b border-gray-100 dark:border-gray-800">
-        <p className="px-4 pt-3 pb-1 text-xs text-gray-500">This Month</p>
+      <section className="border-b border-line">
+        <p className="px-4 pt-3 pb-1 text-xs text-ink-faint uppercase tracking-wide">This Month</p>
         {monthly ? (
           <MonthlyDigestCard digest={monthly} />
         ) : (
-          <p className="px-4 pb-3 text-sm text-gray-500">
+          <p className="px-4 pb-3 text-sm text-ink-faint">
             No monthly summary yet — the first one lands at the start of next month.
           </p>
         )}
       </section>
 
-      <section className="border-b border-gray-100 dark:border-gray-800">
-        <p className="px-4 pt-3 pb-1 text-xs text-gray-500">
+      <section className="border-b border-line">
+        <p className="px-4 pt-3 pb-1 text-xs text-ink-faint uppercase tracking-wide">
           This Week{weekly ? ` · ${weekly.week_start_date}` : ''}
         </p>
         {weekly ? (
           <WeeklyDigestCard digest={weekly} showLink={false} />
         ) : (
-          <p className="px-4 pb-3 text-sm text-gray-500">
+          <p className="px-4 pb-3 text-sm text-ink-faint">
             No weekly digest yet — the first one lands next Monday.
           </p>
         )}
@@ -102,21 +102,21 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
         earliestDailyReport={earliestDailyReport}
       />
 
-      <section className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-        <p className="text-xs text-gray-500 mb-2">
+      <section className="px-4 py-3 border-b border-line">
+        <p className="text-xs text-ink-faint mb-2 uppercase tracking-wide">
           {isWindowClamped ? `${effectiveWindowDays}-day` : `${windowDays}-day`} trajectory
         </p>
         <TrajectoryHeatmap days={heatmapDays} />
       </section>
 
-      <section className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-        <p className="text-xs text-gray-500 mb-2">
+      <section className="px-4 py-3 border-b border-line">
+        <p className="text-xs text-ink-faint mb-2 uppercase tracking-wide">
           {isWindowClamped ? `${effectiveWindowDays}-day` : `${windowDays}-day`} totals
         </p>
         <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
           <div>
-            <dt className="text-gray-500">Days with data</dt>
-            <dd className="font-medium">
+            <dt className="text-ink-faint">Days with data</dt>
+            <dd className="font-medium text-ink">
               {totals.total_days_with_data}
               {totals.failed_days > 0 && (
                 <span className="text-red-600"> · {totals.failed_days} failed</span>
@@ -124,30 +124,30 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
             </dd>
           </div>
           <div>
-            <dt className="text-gray-500">On-track</dt>
-            <dd className="font-medium">
+            <dt className="text-ink-faint">On-track</dt>
+            <dd className="font-medium text-ink">
               {totals.on_track_days}{' '}
-              <span className="text-gray-400">({onTrackPct}%)</span>
+              <span className="text-ink-faint font-normal">({onTrackPct}%)</span>
             </dd>
           </div>
           <div>
-            <dt className="text-gray-500">Commits</dt>
-            <dd className="font-medium">{totals.total_commits}</dd>
+            <dt className="text-ink-faint">Commits</dt>
+            <dd className="font-medium text-ink">{totals.total_commits}</dd>
           </div>
           <div>
-            <dt className="text-gray-500">Lines</dt>
+            <dt className="text-ink-faint">Lines</dt>
             <dd className="font-medium">
               <span className="text-green-600">+{totals.total_lines_added}</span>{' '}
               <span className="text-red-600">-{totals.total_lines_removed}</span>
             </dd>
           </div>
           <div>
-            <dt className="text-gray-500">Files (unique)</dt>
-            <dd className="font-medium">{totals.unique_files_touched}</dd>
+            <dt className="text-ink-faint">Files (unique)</dt>
+            <dd className="font-medium text-ink">{totals.unique_files_touched}</dd>
           </div>
           <div>
-            <dt className="text-gray-500">Spec adv / drift</dt>
-            <dd className="font-medium">
+            <dt className="text-ink-faint">Spec adv / drift</dt>
+            <dd className="font-medium text-ink">
               {totals.total_advancing} ·{' '}
               <span className="text-amber-600">{totals.total_drifting}</span>
             </dd>
@@ -156,9 +156,9 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
       </section>
 
       <section className="pt-3">
-        <p className="px-4 pb-2 text-xs text-gray-500">Daily timeline (newest first)</p>
+        <p className="px-4 pb-2 text-xs text-ink-faint uppercase tracking-wide">Daily timeline (newest first)</p>
         {daysWithDataOnly.length === 0 ? (
-          <p className="px-6 py-8 text-center text-xs text-gray-500">
+          <p className="px-6 py-8 text-center text-xs text-ink-faint">
             No reports in the last {windowDays} days.
           </p>
         ) : (

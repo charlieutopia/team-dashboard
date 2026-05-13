@@ -7,7 +7,7 @@ function fmtDays(n: number): string {
 function statusBadge(stuckDays: number, shouldHaveWorked: number) {
   // Quiet windows (no working days) shouldn't flag as a status risk
   if (shouldHaveWorked === 0) {
-    return { label: 'No working days yet', cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+    return { label: 'No working days yet', cls: 'bg-card-sunken text-ink-muted border-line' };
   }
   const ratio = stuckDays / shouldHaveWorked;
   if (ratio <= 0.15) {
@@ -48,18 +48,18 @@ export function KpiStrip({
       : `Last ${actualDays} days`;
 
   return (
-    <section className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-      <p className="text-xs text-gray-500 mb-2">{headerLabel}</p>
+    <section className="px-4 py-3 border-b border-line">
+      <p className="text-xs text-ink-faint mb-2">{headerLabel}</p>
 
       <div className="flex items-baseline justify-between mb-2">
         <div>
-          <span className="text-lg font-semibold">
+          <span className="text-lg font-semibold text-ink">
             Worked {days_shipped} of {fmtDays(should_have_worked)} days
           </span>
           {should_have_worked > 0 && (
-            <span className="text-sm text-gray-500 ml-2">({ship_pct}%)</span>
+            <span className="text-sm text-ink-faint ml-2">({ship_pct}%)</span>
           )}
-          <p className="text-[11px] text-gray-500 mt-0.5">
+          <p className="text-[11px] text-ink-faint mt-0.5">
             weekdays after leave and holidays
           </p>
         </div>
@@ -67,8 +67,8 @@ export function KpiStrip({
 
       <div className="flex items-center justify-between text-sm">
         <div>
-          <span className="text-gray-500">Days off:</span>{' '}
-          <span className="font-medium">{fmtDays(on_leave_days)}</span>
+          <span className="text-ink-faint">Days off:</span>{' '}
+          <span className="font-medium text-ink">{fmtDays(on_leave_days)}</span>
         </div>
         <div>
           <span
@@ -77,7 +77,7 @@ export function KpiStrip({
             {status.label}
           </span>
           {stuck_days > 0 && (
-            <span className="text-gray-400 text-[11px] ml-1.5">
+            <span className="text-ink-faint text-[11px] ml-1.5">
               {stuck_days} quiet
             </span>
           )}

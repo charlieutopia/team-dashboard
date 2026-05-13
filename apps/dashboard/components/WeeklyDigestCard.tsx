@@ -6,7 +6,7 @@ const MOMENTUM_BADGE: Record<string, { label: string; cls: string }> = {
   steady: { label: 'Steady', cls: 'bg-green-100 text-green-800 border-green-200' },
   slowing: { label: 'Slowing', cls: 'bg-amber-100 text-amber-800 border-amber-200' },
   stalled: { label: 'Stalled', cls: 'bg-red-100 text-red-800 border-red-200' },
-  no_activity: { label: 'No activity', cls: 'bg-gray-100 text-gray-700 border-gray-200' },
+  no_activity: { label: 'No activity', cls: 'bg-card-sunken text-ink-muted border-line' },
 };
 
 export function WeeklyDigestCard({
@@ -20,9 +20,9 @@ export function WeeklyDigestCard({
 }) {
   if (digest.parse_failed) {
     return (
-      <article className="px-4 py-4 border-b border-gray-100 dark:border-gray-800">
+      <article className="px-4 py-4 border-b border-line">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="font-medium text-sm">
+          <h3 className="font-medium text-sm text-ink">
             {showLink ? (
               <Link href={`/dev/${digest.developer_handle}`} className="hover:underline">
                 {digest.display_name}
@@ -43,9 +43,9 @@ export function WeeklyDigestCard({
   const badge = MOMENTUM_BADGE[digest.momentum ?? 'no_activity'] ?? MOMENTUM_BADGE.no_activity!;
 
   return (
-    <article className={`px-4 ${compact ? 'py-3' : 'py-4'} border-b border-gray-100 dark:border-gray-800`}>
+    <article className={`px-4 ${compact ? 'py-3' : 'py-4'} border-b border-line`}>
       <div className="flex items-center justify-between mb-1.5 gap-2">
-        <h3 className="font-medium text-sm flex-1 min-w-0">
+        <h3 className="font-medium text-sm flex-1 min-w-0 text-ink">
           {showLink ? (
             <Link href={`/dev/${digest.developer_handle}`} className="hover:underline">
               {digest.display_name}
@@ -61,7 +61,7 @@ export function WeeklyDigestCard({
         </span>
       </div>
       {digest.summary && (
-        <p className={`text-sm leading-snug text-gray-800 dark:text-gray-200 ${compact ? 'line-clamp-3' : ''}`}>
+        <p className={`text-sm leading-snug text-ink-muted ${compact ? 'line-clamp-3' : ''}`}>
           {digest.summary}
         </p>
       )}
@@ -70,7 +70,7 @@ export function WeeklyDigestCard({
           {digest.top_themes.map((t, i) => (
             <span
               key={i}
-              className="text-[11px] bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full px-2 py-0.5"
+              className="text-[11px] bg-card-sunken text-ink-muted rounded-full px-2 py-0.5"
             >
               {t}
             </span>

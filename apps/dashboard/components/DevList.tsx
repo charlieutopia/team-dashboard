@@ -44,14 +44,14 @@ export function DevList({
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Find someone…"
-            className="w-full text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full text-sm rounded-md border border-line bg-card px-3 py-2 pr-8 text-ink focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             aria-label="Find a developer"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink-muted text-sm"
               aria-label="Clear"
             >
               ✕
@@ -59,14 +59,14 @@ export function DevList({
           )}
         </div>
         {q && (
-          <p className="text-[11px] text-gray-500 mt-1.5">
+          <p className="text-[11px] text-ink-faint mt-1.5">
             {filtered.length} of {rows.length}
           </p>
         )}
       </div>
 
       {filtered.length === 0 ? (
-        <div className="px-6 py-8 text-center text-sm text-gray-500">
+        <div className="px-6 py-8 text-center text-sm text-ink-faint">
           No one matches &ldquo;{query}&rdquo;.
         </div>
       ) : (

@@ -23,7 +23,7 @@ export default async function AdminTeamPage() {
   if (error) {
     return (
       <main className="min-h-screen p-6">
-        <h1 className="text-xl font-semibold mb-2">Team management</h1>
+        <h1 className="text-xl font-semibold mb-2 text-ink">Team management</h1>
         <p className="text-sm text-red-600">Failed to load: {error.message}</p>
       </main>
     );
@@ -35,23 +35,23 @@ export default async function AdminTeamPage() {
 
   return (
     <main className="min-h-screen pb-8">
-      <header className="px-4 pt-6 pb-4 sticky top-0 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur z-10">
+      <header className="px-4 pt-6 pb-4 sticky top-0 bg-app/85 backdrop-blur z-10 border-b border-line">
         <Link
           href="/"
           className="text-xs text-blue-600 hover:text-blue-700 inline-block mb-2"
         >
           ← back to all
         </Link>
-        <h1 className="text-xl font-semibold">Team management</h1>
-        <p className="text-xs text-gray-500 mt-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Team management</h1>
+        <p className="text-xs text-ink-faint mt-1">
           {activeCount} active · {inactiveCount} inactive
         </p>
-        <p className="text-[11px] text-gray-500 mt-1">
+        <p className="text-[11px] text-ink-faint mt-1">
           Edit short name (auto-saves on blur) or toggle active.
         </p>
       </header>
 
-      <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+      <ul className="divide-y divide-line">
         {devs.map(dev => (
           <li key={dev.id}>
             <AdminDevRow dev={dev} />
