@@ -195,6 +195,11 @@ function makeMockSb(cfg: MockSbConfig = {}) {
             branchDeleteCalls.push({ in: { col, vals } });
             return Promise.resolve({ data: null, error: null });
           }),
+          neq: vi.fn((col: string, val: string) => {
+            // snapshot-delete sentinel — record as a delete-all
+            branchDeleteCalls.push({ in: { col, vals: [val] } });
+            return Promise.resolve({ data: null, error: null });
+          }),
         })),
         insert: vi.fn((rows: any[]) => {
           branchInsertCalls.push(rows);
@@ -507,10 +512,13 @@ describe("runDaily", () => {
     });
 
     expect(result.branches_synced).toBe(2);
-    // Single delete pass over all active dev IDs
+    // Single snapshot-delete pass (clears ALL rows so inactive devs' stale
+    // rows from prior runs don't conflict with fresh inserts).
     expect(branchDeleteCalls).toHaveLength(1);
-    expect(branchDeleteCalls[0]!.in.col).toBe("developer_id");
-    expect(branchDeleteCalls[0]!.in.vals.sort()).toEqual(["dev-alice", "dev-bob"]);
+    expect(branchDeleteCalls[0]!.in.col).toBe("id");
+    expect(branchDeleteCalls[0]!.in.vals).toEqual([
+      "00000000-0000-0000-0000-000000000000",
+    ]);
     // Single bulk insert with both branches
     expect(branchInsertCalls).toHaveLength(1);
     const inserted = branchInsertCalls[0]!;

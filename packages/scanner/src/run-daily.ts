@@ -293,16 +293,20 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
       github_handle: string;
     }[];
     const activeDevIds = activeDevs.map((d) => d.id);
-    if (activeDevIds.length > 0) {
-      const delRes = await sb
-        .from("developer_active_branches")
-        .delete()
-        .in("developer_id", activeDevIds);
-      if (delRes.error) {
-        console.error(
-          `developer_active_branches sync — delete failed: ${delRes.error.message}`,
-        );
-      }
+    // Snapshot semantics: clear ALL rows, then re-insert from this run's
+    // enumeration (which includes inactive devs whose branches still exist
+    // upstream). Earlier scoping the delete to active devs only created a
+    // duplicate-key trap because inactive devs' rows survived from the prior
+    // run while their fresh enumerated rows tried to land on the same key.
+    // Supabase JS rejects an unfiltered .delete(), so use a sentinel filter.
+    const delRes = await sb
+      .from("developer_active_branches")
+      .delete()
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+    if (delRes.error) {
+      console.error(
+        `developer_active_branches sync — delete failed: ${delRes.error.message}`,
+      );
     }
 
     // Dedupe by (developer_id, repo_full_name, branch_name) — the unique
