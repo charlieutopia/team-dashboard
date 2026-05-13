@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { TrajectoryDot } from './TrajectoryDot';
+import { DevAvatar } from './DevAvatar';
 import { TodayStatusPill } from './TodayStatusPill';
 import { DevBranchList } from './DevBranchList';
 import { DevSignalsStrip } from './DevSignalsStrip';
@@ -33,43 +33,48 @@ export function DevCard({
   const drillHref = `/dev/${report.developer_handle}`;
 
   return (
-    <article className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 mb-3 mx-3 shadow-sm relative">
+    <article className="rounded-xl border border-line bg-card p-5 mb-3 mx-3 shadow-sm relative">
       <Link
         href={drillHref}
-        className="block active:opacity-80 transition -m-4 mb-0 p-4 pb-0 rounded-t-xl"
+        className="block active:opacity-80 transition -m-5 mb-0 p-5 pb-0 rounded-t-xl"
         aria-label={`View ${report.display_name}'s timeline`}
       >
-        <span aria-hidden className="absolute top-3 right-3 text-gray-400 text-sm">→</span>
-        <header className="flex items-center gap-3 mb-3">
-          <TrajectoryDot trajectory={report.trajectory} />
+        <span aria-hidden className="absolute top-4 right-4 text-ink-faint text-sm">→</span>
+        <header className="flex items-center gap-3 mb-4">
+          <DevAvatar
+            displayName={report.display_name}
+            handle={report.developer_handle}
+            size="md"
+            trajectory={report.trajectory}
+          />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base font-semibold leading-tight">{report.display_name}</h2>
+              <h2 className="text-[15px] font-semibold leading-tight tracking-tight text-ink">{report.display_name}</h2>
               {todayStatus && <TodayStatusPill status={todayStatus} />}
             </div>
-            <p className="text-xs text-gray-500">@{report.developer_handle}</p>
+            <p className="text-xs text-ink-faint">@{report.developer_handle}</p>
           </div>
         </header>
 
-        <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-200">{report.summary}</p>
+        <p className="text-sm leading-relaxed text-ink-muted">{report.summary}</p>
 
-        <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
+        <dl className="mt-4 grid grid-cols-3 gap-3 text-xs">
           <div>
-            <dt className="text-gray-500">Commits</dt>
-            <dd className="font-medium">{m.commits_today ?? 0} <span className="text-gray-400">(was {m.commits_yesterday ?? 0})</span></dd>
+            <dt className="text-ink-faint uppercase tracking-wide text-[10px]">Commits</dt>
+            <dd className="font-medium text-ink mt-0.5">{m.commits_today ?? 0} <span className="text-ink-faint font-normal">(was {m.commits_yesterday ?? 0})</span></dd>
           </div>
           <div>
-            <dt className="text-gray-500">Lines</dt>
-            <dd className="font-medium"><span className="text-green-600">+{m.lines_added_today ?? 0}</span> <span className="text-red-600">-{m.lines_removed_today ?? 0}</span></dd>
+            <dt className="text-ink-faint uppercase tracking-wide text-[10px]">Lines</dt>
+            <dd className="font-medium mt-0.5"><span className="text-green-600">+{m.lines_added_today ?? 0}</span> <span className="text-red-600">-{m.lines_removed_today ?? 0}</span></dd>
           </div>
           <div>
-            <dt className="text-gray-500">Files</dt>
-            <dd className="font-medium">{(m.files_touched_today ?? []).length}</dd>
+            <dt className="text-ink-faint uppercase tracking-wide text-[10px]">Files</dt>
+            <dd className="font-medium text-ink mt-0.5">{(m.files_touched_today ?? []).length}</dd>
           </div>
         </dl>
 
-        <p className="mt-2 text-xs text-gray-600">
-          Advancing <span className="font-semibold">{(sp.advancing ?? []).length}</span> · Drifting <span className="font-semibold text-amber-600">{report.drift_count}</span>
+        <p className="mt-3 text-xs text-ink-muted">
+          Advancing <span className="font-semibold text-ink">{(sp.advancing ?? []).length}</span> · Drifting <span className="font-semibold text-amber-600">{report.drift_count}</span>
         </p>
       </Link>
 
@@ -104,21 +109,26 @@ function FailedCard({
   cadence?: CadenceEntry;
 }) {
   return (
-    <article className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-4 mb-3 mx-3 shadow-sm relative">
+    <article className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-5 mb-3 mx-3 shadow-sm relative">
       <Link
         href={`/dev/${report.developer_handle}`}
-        className="block -m-4 mb-0 p-4 pb-0 rounded-t-xl active:opacity-80 transition"
+        className="block -m-5 mb-0 p-5 pb-0 rounded-t-xl active:opacity-80 transition"
         aria-label={`View ${report.display_name}'s timeline`}
       >
-        <span aria-hidden className="absolute top-3 right-3 text-gray-400 text-sm">→</span>
-        <header className="flex items-center gap-3 mb-2">
-          <span className="inline-block w-3 h-3 rounded-full bg-red-400" aria-label="failed" />
+        <span aria-hidden className="absolute top-4 right-4 text-ink-faint text-sm">→</span>
+        <header className="flex items-center gap-3 mb-3">
+          <DevAvatar
+            displayName={report.display_name}
+            handle={report.developer_handle}
+            size="md"
+            trajectory="stuck"
+          />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base font-semibold leading-tight">{report.display_name}</h2>
+              <h2 className="text-[15px] font-semibold leading-tight tracking-tight text-ink">{report.display_name}</h2>
               {todayStatus && <TodayStatusPill status={todayStatus} />}
             </div>
-            <p className="text-xs text-gray-500">@{report.developer_handle}</p>
+            <p className="text-xs text-ink-faint">@{report.developer_handle}</p>
           </div>
         </header>
         <p className="text-xs text-red-700 dark:text-red-300">
@@ -151,7 +161,7 @@ function ExpandedSection({ report }: { report: DevReportRow }) {
           <ul className="space-y-1">
             {sp.advancing.map((a: any, i: number) => (
               <li key={i}>
-                <span className="font-mono text-gray-600">{a.spec_item_path}</span> — {a.advance_evidence}
+                <span className="font-mono text-ink-muted">{a.spec_item_path}</span> — {a.advance_evidence}
               </li>
             ))}
           </ul>
@@ -163,13 +173,13 @@ function ExpandedSection({ report }: { report: DevReportRow }) {
           <ul className="space-y-1">
             {sp.drifting.map((d: any, i: number) => (
               <li key={i}>
-                <span className="font-mono text-gray-600">{d.spec_item_path}</span> — {d.drift_evidence}
+                <span className="font-mono text-ink-muted">{d.spec_item_path}</span> — {d.drift_evidence}
               </li>
             ))}
           </ul>
         </div>
       )}
-      <p className="text-gray-400 mt-2">Generator version: {report.generator_version}</p>
+      <p className="text-ink-faint mt-2">Generator version: {report.generator_version}</p>
     </div>
   );
 }

@@ -1,0 +1,55 @@
+/*
+ * Semantic design tokens.
+ *
+ * Stored as RGB triplets (no `rgb()` wrapper) so Tailwind utilities can apply
+ * opacity via the `rgb(var(--x) / <alpha-value>)` pattern. Alpha is then
+ * controllable through `bg-card/80`, `border-line/60`, etc.
+ *
+ * Categories:
+ *   - surface (app / card / card-sunken)  — background layers
+ *   - line / line-strong                  — borders
+ *   - ink / ink-muted / ink-faint         — text hierarchy
+ *   - trajectory                          — fixed semantic mapping for the
+ *                                           dot/ring used on dev cards
+ *
+ * Raw palette accents (blue, green, amber, red, sky) intentionally stay on
+ * Tailwind's built-in palette — only the SEMANTIC roles get tokens.
+ */
+
+:root {
+  /* Surface */
+  --app: 249 250 251;          /* gray-50 */
+  --card: 255 255 255;         /* white */
+  --card-sunken: 243 244 246;  /* gray-100 */
+
+  /* Lines */
+  --line: 229 231 235;         /* gray-200 */
+  --line-strong: 209 213 219;  /* gray-300 */
+
+  /* Text */
+  --ink: 17 24 39;             /* gray-900 */
+  --ink-muted: 75 85 99;       /* gray-600 */
+  --ink-faint: 156 163 175;    /* gray-400 */
+
+  /* Trajectory (semantic, fixed) */
+  --trajectory-on-track: 34 197 94;
+  --trajectory-ahead: 59 130 246;
+  --trajectory-behind: 245 158 11;
+  --trajectory-stuck: 239 68 68;
+  --trajectory-no-activity: 156 163 175;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --app: 17 24 39;             /* gray-900 */
+    --card: 31 41 55;            /* gray-800 */
+    --card-sunken: 12 18 30;
+
+    --line: 55 65 81;            /* gray-700 */
+    --line-strong: 75 85 99;     /* gray-600 */
+
+    --ink: 243 244 246;          /* gray-100 */
+    --ink-muted: 209 213 219;    /* gray-300 */
+    --ink-faint: 156 163 175;    /* gray-400 */
+  }
+}

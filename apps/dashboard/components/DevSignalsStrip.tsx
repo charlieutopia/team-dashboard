@@ -1,3 +1,4 @@
+import { CadenceSparkline } from './CadenceSparkline';
 import type { CadenceEntry, OpenPrRow } from '@/lib/queries';
 
 function cadenceLabel(c: CadenceEntry): {
@@ -7,7 +8,7 @@ function cadenceLabel(c: CadenceEntry): {
 } | null {
   if (c.direction === 'no_data') return null;
   const sign = c.deltaPct > 0 ? '+' : '';
-  const text = `commits ${sign}${c.deltaPct}% vs last week`;
+  const text = `${sign}${c.deltaPct}% vs last week`;
   if (c.direction === 'up') {
     return {
       text,
@@ -25,7 +26,7 @@ function cadenceLabel(c: CadenceEntry): {
   return {
     text,
     arrow: '→',
-    cls: 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
+    cls: 'bg-card-sunken text-ink-muted border-line',
   };
 }
 
@@ -42,7 +43,9 @@ export function DevSignalsStrip({
 }) {
   const prCount = prs?.length ?? 0;
   const cadenceBadge = cadence ? cadenceLabel(cadence) : null;
-  if (prCount === 0 && !cadenceBadge) return null;
+  const hasSparkline =
+    cadence && cadence.daily.some(v => v > 0) && cadence.direction !== 'no_data';
+  if (prCount === 0 && !cadenceBadge && !hasSparkline) return null;
 
   const prListUrl = primaryRepo
     ? `https://github.com/${primaryRepo}/pulls?q=is%3Apr+is%3Aopen+author%3A${githubHandle}`
@@ -56,7 +59,7 @@ export function DevSignalsStrip({
         : `${prCount} open PR${prCount === 1 ? '' : 's'}`;
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] uppercase tracking-wide">
+    <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[10px] uppercase tracking-wide">
       {prCount > 0 && (
         <a
           href={prListUrl}
@@ -68,12 +71,15 @@ export function DevSignalsStrip({
           {prLabel}
         </a>
       )}
-      {cadenceBadge && (
+      {cadenceBadge && cadence && (
         <span
-          className={`inline-flex items-center border rounded px-1.5 py-0.5 font-medium ${cadenceBadge.cls}`}
-          title={`This week ${cadence?.thisWeek ?? 0} · last week ${cadence?.lastWeek ?? 0}`}
+          className={`inline-flex items-center gap-1.5 border rounded px-1.5 py-0.5 font-medium ${cadenceBadge.cls}`}
+          title={`This week ${cadence.thisWeek} · last week ${cadence.lastWeek}`}
         >
-          {cadenceBadge.arrow} {cadenceBadge.text}
+          {hasSparkline && (
+            <CadenceSparkline daily={cadence.daily} direction={cadence.direction} />
+          )}
+          <span>{cadenceBadge.arrow} {cadenceBadge.text}</span>
         </span>
       )}
     </div>

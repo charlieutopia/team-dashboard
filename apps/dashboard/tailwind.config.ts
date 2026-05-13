@@ -5,12 +5,20 @@ export default {
   theme: {
     extend: {
       colors: {
+        app: 'rgb(var(--app) / <alpha-value>)',
+        card: 'rgb(var(--card) / <alpha-value>)',
+        'card-sunken': 'rgb(var(--card-sunken) / <alpha-value>)',
+        line: 'rgb(var(--line) / <alpha-value>)',
+        'line-strong': 'rgb(var(--line-strong) / <alpha-value>)',
+        ink: 'rgb(var(--ink) / <alpha-value>)',
+        'ink-muted': 'rgb(var(--ink-muted) / <alpha-value>)',
+        'ink-faint': 'rgb(var(--ink-faint) / <alpha-value>)',
         trajectory: {
-          on_track: '#22c55e',
-          ahead: '#3b82f6',
-          behind: '#f59e0b',
-          stuck: '#ef4444',
-          no_activity: '#9ca3af',
+          on_track: 'rgb(var(--trajectory-on-track) / <alpha-value>)',
+          ahead: 'rgb(var(--trajectory-ahead) / <alpha-value>)',
+          behind: 'rgb(var(--trajectory-behind) / <alpha-value>)',
+          stuck: 'rgb(var(--trajectory-stuck) / <alpha-value>)',
+          no_activity: 'rgb(var(--trajectory-no-activity) / <alpha-value>)',
         },
       },
     },
