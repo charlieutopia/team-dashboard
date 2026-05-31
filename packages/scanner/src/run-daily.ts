@@ -24,6 +24,7 @@ export interface RunDailyResult {
   reports_succeeded: number;
   reports_failed: number;
   skipped_no_developer: number;
+  skipped_inactive: number;
   branches_synced: number;
   prs_synced: number;
 }
@@ -84,6 +85,7 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
     reports_succeeded: 0,
     reports_failed: 0,
     skipped_no_developer: 0,
+    skipped_inactive: 0,
     branches_synced: 0,
     prs_synced: 0,
   };
@@ -177,13 +179,14 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
     handle: string;
     developer_id: string;
     display_name: string | null;
+    active: boolean;
     branches: BranchPayload[];
   }
   const resolved: ResolvedDev[] = [];
   for (const [handle, branches] of branchesByHandle) {
     const devRes = await sb
       .from("developers")
-      .select("id, display_name")
+      .select("id, display_name, active")
       .eq("github_handle", handle)
       .maybeSingle();
     if (devRes.error) {
@@ -191,7 +194,11 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
         `developers query failed for ${handle}: ${devRes.error.message}`,
       );
     }
-    const row = devRes.data as { id: string; display_name: string | null } | null;
+    const row = devRes.data as {
+      id: string;
+      display_name: string | null;
+      active: boolean;
+    } | null;
     if (!row) {
       console.log(`skip ${handle}: not in developers table`);
       counters.skipped_no_developer += 1;
@@ -201,12 +208,22 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
       handle,
       developer_id: row.id,
       display_name: row.display_name,
+      active: row.active,
       branches,
     });
   }
 
   // 6. Serial analyze + upsert loop.
   for (const dev of resolved) {
+    if (!dev.active) {
+      // Resigned / deactivated devs can still have branches upstream, so they
+      // appear in `resolved` and their structural rows sync below — but they
+      // must NOT get a daily report. Generating one burns a claude call and
+      // surfaces a spurious "failed report" for someone no longer on the team.
+      console.log(`skip ${dev.handle}: developer inactive`);
+      counters.skipped_inactive += 1;
+      continue;
+    }
     counters.developers_analyzed += 1;
     let result: AnalyzeResult;
     try {

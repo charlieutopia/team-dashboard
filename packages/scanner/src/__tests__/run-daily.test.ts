@@ -123,7 +123,10 @@ function makeMockOctokit(opts: MockOctokitOpts) {
 
 interface MockSbConfig {
   trackedRepos?: { id: string; full_name: string; spec_module: string }[];
-  developersByHandle?: Record<string, { id: string; display_name?: string | null }>;
+  developersByHandle?: Record<
+    string,
+    { id: string; display_name?: string | null; active?: boolean }
+  >;
 }
 
 function makeMockSb(cfg: MockSbConfig = {}) {
@@ -170,7 +173,10 @@ function makeMockSb(cfg: MockSbConfig = {}) {
               maybeSingle: vi.fn(() => {
                 const row = developersByHandle[val];
                 return Promise.resolve({
-                  data: row ?? null,
+                  // active defaults to true when a fixture omits it, so existing
+                  // tests keep their pre-active-gate behavior; a fixture that
+                  // sets active:false overrides via the spread.
+                  data: row ? { active: true, ...row } : null,
                   error: null,
                 });
               }),
@@ -288,6 +294,7 @@ describe("runDaily", () => {
       reports_succeeded: 1,
       reports_failed: 0,
       skipped_no_developer: 0,
+      skipped_inactive: 0,
       branches_synced: 1,
       prs_synced: 0,
     });
@@ -371,11 +378,63 @@ describe("runDaily", () => {
       reports_succeeded: 0,
       reports_failed: 0,
       skipped_no_developer: 1,
+      skipped_inactive: 0,
       branches_synced: 0,
       prs_synced: 0,
     });
     expect(analyze).not.toHaveBeenCalled();
     expect(upsertCalls).toHaveLength(0);
+  });
+
+  it("skip path: inactive developer — branches still sync but NO daily report", async () => {
+    const { sb, upsertCalls, branchInsertCalls } = makeMockSb({
+      developersByHandle: {
+        alice: { id: "dev-alice" }, // active (default)
+        tia: { id: "dev-tia", active: false }, // resigned — inactive
+      },
+    });
+    const octokit = makeMockOctokit({
+      branches: [
+        { name: "feat/a", sha: "head-a" },
+        { name: "fix/old", sha: "head-old" },
+      ],
+      diffByBranch: {
+        "feat/a": {
+          files: [{ filename: "src/x.ts", patch: "+x", status: "modified" }],
+          commits: [{ sha: "c1", message: "wip", author_login: "alice" }],
+        },
+        "fix/old": {
+          files: [{ filename: "src/old.ts", patch: "+o", status: "modified" }],
+          commits: [{ sha: "c2", message: "stale", author_login: "tia" }],
+        },
+      },
+    });
+    const analyze = vi.fn(async (input) => validReport(input.developer_handle));
+
+    const result = await runDaily({ sb, octokit, analyze, klDate: KL_DATE });
+
+    // Inactive dev gets NO daily report — only the active dev is analyzed.
+    expect(result).toEqual({
+      developers_analyzed: 1,
+      reports_succeeded: 1,
+      reports_failed: 0,
+      skipped_no_developer: 0,
+      skipped_inactive: 1,
+      branches_synced: 2,
+      prs_synced: 0,
+    });
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect(analyze.mock.calls[0]![0].developer_handle).toBe("alice");
+    // No daily_reports upsert for the inactive dev.
+    expect(upsertCalls).toHaveLength(1);
+    expect(upsertCalls[0]!.row.developer_id).toBe("dev-alice");
+    // Branch sync still records the inactive dev's lingering branch — the
+    // active-flag gate is ONLY on report generation, not on structural sync.
+    const insertedDevIds = branchInsertCalls
+      .flat()
+      .map((r: any) => r.developer_id)
+      .sort();
+    expect(insertedDevIds).toEqual(["dev-alice", "dev-tia"]);
   });
 
   it("multi-dev: 2 devs each with 1 branch — analyze called twice, both succeed", async () => {
@@ -415,6 +474,7 @@ describe("runDaily", () => {
       reports_succeeded: 2,
       reports_failed: 0,
       skipped_no_developer: 0,
+      skipped_inactive: 0,
       branches_synced: 2,
       prs_synced: 0,
     });
