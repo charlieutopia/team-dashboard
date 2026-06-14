@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import { setActive, updateDisplayName } from '@/app/admin/team/actions';
+import {
+  setActive,
+  setReviewer,
+  updateDisplayName,
+  updateLevel,
+  updateOwnedSystems,
+  updateTenureNote,
+  type DevLevel,
+} from '@/app/admin/team/actions';
 
 interface Dev {
   id: string;
@@ -9,28 +17,72 @@ interface Dev {
   display_name: string;
   email: string | null;
   active: boolean;
+  level: DevLevel | null;
+  tenure_note: string | null;
+  is_reviewer: boolean;
+  owned_systems: string[];
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+
+const LEVEL_OPTIONS: { value: '' | DevLevel; label: string }[] = [
+  { value: '', label: 'Unset' },
+  { value: 'intern', label: 'Intern' },
+  { value: 'junior', label: 'Junior' },
+  { value: 'senior', label: 'Senior' },
+  { value: 'freelancer', label: 'Freelancer' },
+];
 
 export function AdminDevRow({ dev }: { dev: Dev }) {
   const [name, setName] = useState(dev.display_name);
   const [committed, setCommitted] = useState(dev.display_name);
   const [active, setActiveLocal] = useState(dev.active);
+  const [reviewer, setReviewerLocal] = useState(dev.is_reviewer);
+  const [level, setLevelLocal] = useState<'' | DevLevel>(dev.level ?? '');
+  const [tenure, setTenure] = useState(dev.tenure_note ?? '');
+  const [tenureCommitted, setTenureCommitted] = useState(dev.tenure_note ?? '');
+  const [systems, setSystems] = useState((dev.owned_systems ?? []).join(', '));
+  const [systemsCommitted, setSystemsCommitted] = useState(
+    (dev.owned_systems ?? []).join(', '),
+  );
+
   const [nameSave, setNameSave] = useState<SaveState>('idle');
   const [activeSave, setActiveSave] = useState<SaveState>('idle');
+  const [reviewerSave, setReviewerSave] = useState<SaveState>('idle');
+  const [levelSave, setLevelSave] = useState<SaveState>('idle');
+  const [tenureSave, setTenureSave] = useState<SaveState>('idle');
+  const [systemsSave, setSystemsSave] = useState<SaveState>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Auto-clear "saved" badge after 1.5s
+  const anySaving =
+    nameSave === 'saving' ||
+    activeSave === 'saving' ||
+    reviewerSave === 'saving' ||
+    levelSave === 'saving' ||
+    tenureSave === 'saving' ||
+    systemsSave === 'saving';
+  const anySaved =
+    nameSave === 'saved' ||
+    activeSave === 'saved' ||
+    reviewerSave === 'saved' ||
+    levelSave === 'saved' ||
+    tenureSave === 'saved' ||
+    systemsSave === 'saved';
+
+  // Auto-clear "saved" badges after 1.5s
   useEffect(() => {
-    if (nameSave !== 'saved' && activeSave !== 'saved') return;
+    if (!anySaved) return;
     const t = setTimeout(() => {
-      if (nameSave === 'saved') setNameSave('idle');
-      if (activeSave === 'saved') setActiveSave('idle');
+      setNameSave(s => (s === 'saved' ? 'idle' : s));
+      setActiveSave(s => (s === 'saved' ? 'idle' : s));
+      setReviewerSave(s => (s === 'saved' ? 'idle' : s));
+      setLevelSave(s => (s === 'saved' ? 'idle' : s));
+      setTenureSave(s => (s === 'saved' ? 'idle' : s));
+      setSystemsSave(s => (s === 'saved' ? 'idle' : s));
     }, 1500);
     return () => clearTimeout(t);
-  }, [nameSave, activeSave]);
+  }, [anySaved]);
 
   function commitName() {
     const trimmed = name.trim();
@@ -69,6 +121,83 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
         setActiveLocal(active); // revert
         setErrorMsg(result.error);
         setActiveSave('error');
+      }
+    });
+  }
+
+  function toggleReviewer() {
+    const next = !reviewer;
+    setReviewerLocal(next);
+    setReviewerSave('saving');
+    setErrorMsg(null);
+    startTransition(async () => {
+      const result = await setReviewer(dev.id, next);
+      if (result.ok) {
+        setReviewerSave('saved');
+      } else {
+        setReviewerLocal(reviewer); // revert
+        setErrorMsg(result.error);
+        setReviewerSave('error');
+      }
+    });
+  }
+
+  function changeLevel(next: '' | DevLevel) {
+    const prev = level;
+    setLevelLocal(next);
+    setLevelSave('saving');
+    setErrorMsg(null);
+    startTransition(async () => {
+      const result = await updateLevel(dev.id, next === '' ? null : next);
+      if (result.ok) {
+        setLevelSave('saved');
+      } else {
+        setLevelLocal(prev); // revert
+        setErrorMsg(result.error);
+        setLevelSave('error');
+      }
+    });
+  }
+
+  function commitTenure() {
+    const trimmed = tenure.trim();
+    if (trimmed === tenureCommitted.trim()) return; // no change
+    setTenureSave('saving');
+    setErrorMsg(null);
+    startTransition(async () => {
+      const result = await updateTenureNote(dev.id, trimmed);
+      if (result.ok) {
+        setTenureCommitted(trimmed);
+        setTenureSave('saved');
+      } else {
+        setErrorMsg(result.error);
+        setTenureSave('error');
+        setTenure(tenureCommitted); // revert
+      }
+    });
+  }
+
+  function commitSystems() {
+    const next = systems.trim();
+    if (next === systemsCommitted.trim()) return; // no change
+    const parsed = systems
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+    setSystemsSave('saving');
+    setErrorMsg(null);
+    startTransition(async () => {
+      const result = await updateOwnedSystems(dev.id, parsed);
+      if (result.ok) {
+        // Reflect the normalised (de-duped, trimmed) value back into the input.
+        const normalised = parsed.join(', ');
+        setSystems(normalised);
+        setSystemsCommitted(normalised);
+        setSystemsSave('saved');
+      } else {
+        setErrorMsg(result.error);
+        setSystemsSave('error');
+        setSystems(systemsCommitted); // revert
       }
     });
   }
@@ -124,14 +253,103 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
         </div>
       </div>
 
-      {(nameSave !== 'idle' || activeSave !== 'idle' || errorMsg) && (
+      {/* Seniority profile fields */}
+      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wide text-ink-faint">Level</span>
+          <select
+            value={level}
+            onChange={e => changeLevel(e.target.value as '' | DevLevel)}
+            disabled={isPending}
+            className="text-sm text-ink bg-card border border-line rounded-md px-2 py-1.5 focus:border-blue-500 focus:outline-none disabled:opacity-50"
+            aria-label={`Level for ${dev.display_name}`}
+          >
+            {LEVEL_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wide text-ink-faint">Reviewer</span>
+          <div className="flex items-center gap-2 h-[34px]">
+            <button
+              type="button"
+              onClick={toggleReviewer}
+              disabled={isPending}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                reviewer ? 'bg-green-500' : 'bg-line-strong'
+              } ${isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+              aria-label={`Toggle ${dev.display_name} reviewer`}
+              aria-pressed={reviewer}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  reviewer ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+            <span className="text-[11px] text-ink-faint">
+              {reviewer ? 'Yes' : 'No'}
+            </span>
+          </div>
+        </div>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wide text-ink-faint">Tenure note</span>
+          <input
+            type="text"
+            value={tenure}
+            onChange={e => setTenure(e.target.value)}
+            onBlur={commitTenure}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                (e.target as HTMLInputElement).blur();
+              } else if (e.key === 'Escape') {
+                setTenure(tenureCommitted);
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            placeholder="e.g. joined Mar 2026"
+            className="text-sm text-ink bg-card border border-line rounded-md px-2 py-1.5 focus:border-blue-500 focus:outline-none placeholder:text-ink-faint disabled:opacity-50"
+            aria-label={`Tenure note for ${dev.display_name}`}
+            disabled={isPending}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wide text-ink-faint">
+            Owned systems (comma-separated)
+          </span>
+          <input
+            type="text"
+            value={systems}
+            onChange={e => setSystems(e.target.value)}
+            onBlur={commitSystems}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                (e.target as HTMLInputElement).blur();
+              } else if (e.key === 'Escape') {
+                setSystems(systemsCommitted);
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            placeholder="e.g. billing, auth"
+            className="text-sm text-ink bg-card border border-line rounded-md px-2 py-1.5 focus:border-blue-500 focus:outline-none placeholder:text-ink-faint disabled:opacity-50"
+            aria-label={`Owned systems for ${dev.display_name}`}
+            disabled={isPending}
+          />
+        </label>
+      </div>
+
+      {(anySaving || anySaved || errorMsg) && (
         <div className="mt-1.5 text-[11px]">
-          {(nameSave === 'saving' || activeSave === 'saving') && (
-            <span className="text-ink-faint">Saving…</span>
-          )}
-          {(nameSave === 'saved' || activeSave === 'saved') && !errorMsg && (
-            <span className="text-green-600">Saved</span>
-          )}
+          {anySaving && <span className="text-ink-faint">Saving…</span>}
+          {anySaved && !errorMsg && <span className="text-green-600">Saved</span>}
           {errorMsg && <span className="text-red-600">{errorMsg}</span>}
         </div>
       )}
