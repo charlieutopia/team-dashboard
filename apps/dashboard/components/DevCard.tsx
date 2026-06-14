@@ -29,7 +29,6 @@ export function DevCard({
   }
 
   const m = report.metrics ?? {};
-  const sp = report.spec_progress ?? { advancing: [], drifting: [] };
   const drillHref = `/dev/${report.developer_handle}`;
 
   return (
@@ -58,14 +57,10 @@ export function DevCard({
 
         <p className="text-sm leading-relaxed text-ink-muted">{report.summary}</p>
 
-        <dl className="mt-4 grid grid-cols-3 gap-3 text-xs">
+        <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
           <div>
             <dt className="text-ink-faint uppercase tracking-wide text-[10px]">Commits</dt>
             <dd className="font-medium text-ink mt-0.5">{m.commits_today ?? 0} <span className="text-ink-faint font-normal">(was {m.commits_yesterday ?? 0})</span></dd>
-          </div>
-          <div>
-            <dt className="text-ink-faint uppercase tracking-wide text-[10px]">Lines</dt>
-            <dd className="font-medium mt-0.5"><span className="text-green-600">+{m.lines_added_today ?? 0}</span> <span className="text-red-600">-{m.lines_removed_today ?? 0}</span></dd>
           </div>
           <div>
             <dt className="text-ink-faint uppercase tracking-wide text-[10px]">Files</dt>
@@ -73,8 +68,9 @@ export function DevCard({
           </div>
         </dl>
 
-        <p className="mt-3 text-xs text-ink-muted">
-          Advancing <span className="font-semibold text-ink">{(sp.advancing ?? []).length}</span> · Drifting <span className="font-semibold text-amber-600">{report.drift_count}</span>
+        {/* Lines of code is a secondary, demoted signal — never a headline. */}
+        <p className="mt-2 text-[10px] text-ink-faint">
+          Lines <span className="text-green-600">+{m.lines_added_today ?? 0}</span> <span className="text-red-600">-{m.lines_removed_today ?? 0}</span>
         </p>
       </Link>
 
@@ -152,33 +148,8 @@ function FailedCard({
 }
 
 function ExpandedSection({ report }: { report: DevReportRow }) {
-  const sp = report.spec_progress ?? { advancing: [], drifting: [] };
   return (
     <div className="mt-3 space-y-3 text-xs">
-      {sp.advancing && sp.advancing.length > 0 && (
-        <div>
-          <h3 className="font-semibold text-green-700 mb-1">Advancing</h3>
-          <ul className="space-y-1">
-            {sp.advancing.map((a: any, i: number) => (
-              <li key={i}>
-                <span className="font-mono text-ink-muted">{a.spec_item_path}</span> — {a.advance_evidence}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {sp.drifting && sp.drifting.length > 0 && (
-        <div>
-          <h3 className="font-semibold text-amber-700 mb-1">Drifting</h3>
-          <ul className="space-y-1">
-            {sp.drifting.map((d: any, i: number) => (
-              <li key={i}>
-                <span className="font-mono text-ink-muted">{d.spec_item_path}</span> — {d.drift_evidence}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
       <p className="text-ink-faint mt-2">Generator version: {report.generator_version}</p>
     </div>
   );

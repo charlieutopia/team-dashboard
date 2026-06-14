@@ -145,13 +145,6 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
             <dt className="text-ink-faint">Files (unique)</dt>
             <dd className="font-medium text-ink">{totals.unique_files_touched}</dd>
           </div>
-          <div>
-            <dt className="text-ink-faint">Spec adv / drift</dt>
-            <dd className="font-medium text-ink">
-              {totals.total_advancing} ·{' '}
-              <span className="text-amber-600">{totals.total_drifting}</span>
-            </dd>
-          </div>
         </dl>
       </section>
 

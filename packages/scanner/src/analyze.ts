@@ -19,12 +19,12 @@ export interface AnalyzeInput {
   }[];
   spec_text?: string;
   // Optional human display name (e.g. "Naz Najmuddin"). Used to derive a
-  // first-name salutation in the Boss-readable summary. Falls back to the
+  // first-name salutation in the Charlie-readable summary. Falls back to the
   // GitHub handle when missing.
   display_name?: string;
 }
 
-// First token of display_name, or the github handle as fallback. Boss-facing
+// First token of display_name, or the github handle as fallback. Charlie-facing
 // summaries address each developer by first name only (Range / 15Five tone).
 export function firstNameFrom(
   displayName: string | undefined,
@@ -106,7 +106,7 @@ export function buildPrompt(input: AnalyzeInput): string {
     : `\n(no spec module configured)\n`;
 
   return [
-    `You are writing a daily activity note for the Boss to read on her phone.`,
+    `You are writing a daily activity note for Charlie to read on her phone.`,
     `She manages developers but does NOT read code. Speak business outcomes, not implementation details.`,
     ``,
     `## Who you're describing`,
@@ -130,7 +130,7 @@ export function buildPrompt(input: AnalyzeInput): string {
     `{`,
     `  "developer_handle": "${input.developer_handle}",   // PASS THROUGH`,
     `  "date": "${input.date}",                  // PASS THROUGH`,
-    `  "summary": string,                        // see SUMMARY RULES below — Boss reads this`,
+    `  "summary": string,                        // see SUMMARY RULES below — Charlie reads this`,
     `  "metrics": {`,
     `    "commits_today": integer,               // count of commits attributable to this person today`,
     `    "commits_yesterday": integer,`,
@@ -138,7 +138,7 @@ export function buildPrompt(input: AnalyzeInput): string {
     `    "lines_removed_today": integer,`,
     `    "files_touched_today": string[]         // file paths from the changes`,
     `  },`,
-    `  "spec_progress": {                        // technical — for Charlie's drill-down audit, NOT the Boss surface`,
+    `  "spec_progress": {                        // technical — for Charlie's drill-down audit, NOT the Charlie surface`,
     `    "advancing": [{ "spec_item_path": string, "advance_evidence": string }],`,
     `    "drifting":  [{ "spec_item_path": string, "drift_evidence":  string }]`,
     `  },`,
@@ -146,9 +146,9 @@ export function buildPrompt(input: AnalyzeInput): string {
     `  "generator_version": string               // any string — orchestrator overwrites`,
     `}`,
     ``,
-    `## SUMMARY RULES (the Boss-facing field — get this right)`,
+    `## SUMMARY RULES (the Charlie-facing field — get this right)`,
     ``,
-    `The summary is the Boss's whole window into ${firstName}'s day. She's on her phone. She has 10 seconds.`,
+    `The summary is Charlie's whole window into ${firstName}'s day. She's on her phone. She has 10 seconds.`,
     ``,
     `1. **BLUF — Bottom Line Up Front.** Sentence 1 = the headline: what was the result, or what's the state. Examples:`,
     `   - "${firstName} finished the part that decides which message goes to which staff."`,

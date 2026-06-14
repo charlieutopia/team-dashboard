@@ -293,6 +293,10 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
       github_handle: string;
     }[];
     const activeDevIds = activeDevs.map((d) => d.id);
+    // Only active developers' rows belong on the dashboard surfaces. Inactive
+    // devs are hidden everywhere except /admin/team, so we never insert their
+    // branches or PRs even when their commits still appear upstream.
+    const activeDevIdSet = new Set(activeDevIds);
     // Snapshot semantics: clear ALL rows, then re-insert from this run's
     // enumeration (which includes inactive devs whose branches still exist
     // upstream). Earlier scoping the delete to active devs only created a
@@ -330,6 +334,8 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
       files_changed: number;
     }>();
     for (const dev of resolved) {
+      // Skip inactive devs — their branches are dashboard-hidden.
+      if (!activeDevIdSet.has(dev.developer_id)) continue;
       for (const b of dev.branches) {
         const key = `${dev.developer_id}|${b.repo_full_name}|${b.branch_name}`;
         branchInsertMap.set(key, {

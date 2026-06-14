@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Team Dashboard',
-  description: 'Boss daily team activity report',
+  description: 'Daily team activity report',
 };
 
 export const viewport: Viewport = {
