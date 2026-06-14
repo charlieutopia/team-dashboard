@@ -123,7 +123,10 @@ function makeMockOctokit(opts: MockOctokitOpts) {
 
 interface MockSbConfig {
   trackedRepos?: { id: string; full_name: string; spec_module: string }[];
-  developersByHandle?: Record<string, { id: string; display_name?: string | null }>;
+  developersByHandle?: Record<
+    string,
+    { id: string; display_name?: string | null; active?: boolean }
+  >;
 }
 
 function makeMockSb(cfg: MockSbConfig = {}) {
@@ -157,12 +160,19 @@ function makeMockSb(cfg: MockSbConfig = {}) {
           //     active devs (used by the active-branches + open-PRs sync steps)
           const eqFn = vi.fn((col: string, val: any) => {
             if (col === "active") {
-              const rows = Object.entries(developersByHandle).map(
-                ([handle, r]) => ({
+              // Mirror the real query: .eq("active", true) returns ONLY active
+              // devs. A dev with active:false (or any non-true value) is filtered
+              // out. Devs that omit the flag default to active (back-compat with
+              // tests written before the active flag existed).
+              const rows = Object.entries(developersByHandle)
+                .filter(([, r]) => {
+                  const isActive = (r as { active?: boolean }).active ?? true;
+                  return isActive === val;
+                })
+                .map(([handle, r]) => ({
                   id: (r as { id: string }).id,
                   github_handle: handle,
-                }),
-              );
+                }));
               return Promise.resolve({ data: rows, error: null });
             }
             // Default: handle-resolve path
@@ -599,5 +609,77 @@ describe("runDaily", () => {
     expect(open.repo_full_name).toBe(REPO_FULL);
     const draft = inserted.find((r: any) => r.pr_number === 43)!;
     expect(draft.pr_state).toBe("draft");
+  });
+
+  it("active-only sync: inactive dev's branches and PRs are NOT inserted", async () => {
+    const { sb, branchInsertCalls, prInsertCalls } = makeMockSb({
+      developersByHandle: {
+        alice: { id: "dev-alice", active: true },
+        carol: { id: "dev-carol", active: false },
+      },
+    });
+    const octokit = makeMockOctokit({
+      branches: [
+        { name: "feat/a", sha: "head-a" },
+        { name: "feat/c", sha: "head-c" },
+      ],
+      diffByBranch: {
+        "feat/a": {
+          files: [{ filename: "src/a.ts", patch: "+a", status: "modified" }],
+          commits: [{ sha: "c1", message: "alice work", author_login: "alice" }],
+        },
+        "feat/c": {
+          files: [{ filename: "src/c.ts", patch: "+c", status: "modified" }],
+          commits: [{ sha: "c2", message: "carol work", author_login: "carol" }],
+        },
+      },
+      prsByAuthor: {
+        alice: [
+          {
+            number: 10,
+            title: "feat: alice ships",
+            html_url: "https://github.com/utopiabuilder/utopiaspace/pull/10",
+            draft: false,
+            updated_at: "2026-05-10T10:00:00Z",
+            created_at: "2026-05-10T09:00:00Z",
+            author: "alice",
+          },
+        ],
+        carol: [
+          {
+            number: 11,
+            title: "feat: carol ships",
+            html_url: "https://github.com/utopiabuilder/utopiaspace/pull/11",
+            draft: false,
+            updated_at: "2026-05-10T10:00:00Z",
+            created_at: "2026-05-10T09:00:00Z",
+            author: "carol",
+          },
+        ],
+      },
+    });
+    const analyze = vi.fn(async (input) => validReport(input.developer_handle));
+
+    const result = await runDaily({ sb, octokit, analyze, klDate: KL_DATE });
+
+    // Only the active dev's branch lands.
+    expect(result.branches_synced).toBe(1);
+    expect(branchInsertCalls).toHaveLength(1);
+    const branchRows = branchInsertCalls[0]!;
+    expect(branchRows).toHaveLength(1);
+    expect(branchRows[0]!.developer_id).toBe("dev-alice");
+    expect(
+      branchRows.some((r: any) => r.developer_id === "dev-carol"),
+    ).toBe(false);
+
+    // Only the active dev's PR lands.
+    expect(result.prs_synced).toBe(1);
+    expect(prInsertCalls).toHaveLength(1);
+    const prRows = prInsertCalls[0]!;
+    expect(prRows).toHaveLength(1);
+    expect(prRows[0]!.developer_id).toBe("dev-alice");
+    expect(
+      prRows.some((r: any) => r.developer_id === "dev-carol"),
+    ).toBe(false);
   });
 });

@@ -31,10 +31,7 @@ export function DayTimelineCard({ day }: { day: DevTimelineDay }) {
   }
 
   const m = day.metrics ?? {};
-  const sp = day.spec_progress ?? { advancing: [], drifting: [] };
   const filesCount = Array.isArray(m.files_touched_today) ? m.files_touched_today.length : 0;
-  const advCount = Array.isArray(sp.advancing) ? sp.advancing.length : 0;
-  const drfCount = Array.isArray(sp.drifting) ? sp.drifting.length : 0;
 
   return (
     <article className="rounded-lg border border-line bg-card p-3 mb-2 mx-3 shadow-sm">
@@ -58,9 +55,6 @@ export function DayTimelineCard({ day }: { day: DevTimelineDay }) {
               <span className="text-red-600">-{m.lines_removed_today ?? 0}</span>
             </span>
             <span>files {filesCount}</span>
-            <span>
-              spec {advCount}/<span className="text-amber-600">{drfCount}</span>
-            </span>
           </div>
         </div>
       </div>

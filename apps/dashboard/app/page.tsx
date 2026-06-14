@@ -23,7 +23,7 @@ export default async function HomePage() {
       getCadenceByDev(supabase),
     ]);
   // Suppress per-card sections pre-bootstrap (table empty) so we don't
-  // mislead Boss with empty pills before the scanner has ever populated.
+  // mislead Charlie with empty pills before the scanner has ever populated.
   const branchesByDev = branches.populated ? branches.byDev : undefined;
   const prsByDev = prs.populated ? prs.byDev : undefined;
 

@@ -43,14 +43,7 @@ export function TodayHeader({ today }: { today: TodayStatusResult }) {
         everyoneOff ? 'border-l-4 border-l-amber-400' : ''
       }`}
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-ink tracking-tight">Today · {formatHumanDate(klToday)}</h2>
-        {counts.inactive > 0 && (
-          <span className="text-[10px] text-ink-faint">
-            {counts.inactive} inactive
-          </span>
-        )}
-      </div>
+      <h2 className="text-sm font-semibold text-ink tracking-tight">Today · {formatHumanDate(klToday)}</h2>
       <p className="text-xs text-ink-muted mt-1">{summary}</p>
 
       {showOffList && (

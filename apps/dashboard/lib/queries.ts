@@ -40,7 +40,7 @@ export async function getLatestReports(supabase: SupabaseClient): Promise<Latest
 
   // Find the latest report_date that has any rows. Falls back to most-recent
   // date if today's run hasn't fired yet (cron not deployed; local execution
-  // pattern means morning runs may land before the Boss reads, but mid-day
+  // pattern means morning runs may land before Charlie reads, but mid-day
   // checks may see yesterday's data until the next cron tick).
   const { data: latestDateRow, error: dateErr } = await supabase
     .from('daily_reports')
@@ -68,9 +68,11 @@ export async function getLatestReports(supabase: SupabaseClient): Promise<Latest
       generator_version,
       parse_failed,
       error_msg,
-      developers!inner ( github_handle, display_name )
+      developers!inner ( github_handle, display_name, active )
     `)
-    .eq('report_date', reportDate);
+    .eq('report_date', reportDate)
+    // Inactive devs live only in /admin/team — never on the home list.
+    .eq('developers.active', true);
 
   if (error) throw error;
   if (!reports || reports.length === 0) {
@@ -184,17 +186,25 @@ export async function getDevTimeline(
 ): Promise<DevTimelineResult | null> {
   const klToday = computeKlDate(new Date());
 
-  // 1. Find the developer
+  // 1. Find the developer. Inactive devs live only in /admin/team — treat a
+  //    drill-down to an inactive handle as not-found so /dev/[handle] never
+  //    renders one (the page calls notFound() on a null result).
   const { data: devRow, error: devErr } = await supabase
     .from('developers')
-    .select('id, github_handle, display_name')
+    .select('id, github_handle, display_name, active')
     .eq('github_handle', githubHandle)
     .maybeSingle();
 
   if (devErr) throw devErr;
   if (!devRow) return null;
 
-  const developer = devRow as { id: string; github_handle: string; display_name: string };
+  const developer = devRow as {
+    id: string;
+    github_handle: string;
+    display_name: string;
+    active: boolean;
+  };
+  if (!developer.active) return null;
 
   // 2a. Find the earliest daily_report date for this dev — used to clamp the
   //     window so KPIs aren't computed against a "should have worked" range
@@ -511,9 +521,11 @@ export async function getAllWeeklyDigests(
   const { data, error } = await supabase
     .from('weekly_reports')
     .select(
-      `developer_id, week_start_date, summary, momentum, top_themes, generator_version, parse_failed, error_msg, developers!inner ( github_handle, display_name )`,
+      `developer_id, week_start_date, summary, momentum, top_themes, generator_version, parse_failed, error_msg, developers!inner ( github_handle, display_name, active )`,
     )
-    .eq('week_start_date', weekStartDate);
+    .eq('week_start_date', weekStartDate)
+    // Inactive devs live only in /admin/team — never on the weekly surface.
+    .eq('developers.active', true);
 
   if (error) throw error;
 
@@ -631,7 +643,6 @@ export interface TodayStatusResult {
     halfDay: number;
     publicHoliday: number;
     weekend: number;
-    inactive: number;
     totalActive: number;
   };
   /** Active devs whose status !== 'working' — for the header's off-today list */
@@ -699,25 +710,14 @@ export async function getTodayStatus(
     halfDay: 0,
     publicHoliday: 0,
     weekend: 0,
-    inactive: 0,
     totalActive: 0,
   };
 
   for (const dev of allDevs) {
+    // Inactive devs never appear on any main surface — they live only in
+    // /admin/team. Skip them here so no inactive count, pill, or perDev/
+    // perHandle entry leaks onto the home header or dev list.
     if (!dev.active) {
-      counts.inactive += 1;
-      const inactiveEntry: TodayDevStatus = {
-        developer_id: dev.id,
-        github_handle: dev.github_handle,
-        display_name: dev.display_name,
-        status: 'inactive',
-        leaveType: null,
-        isHalfDay: false,
-        halfSegment: null,
-        holidayName: null,
-      };
-      perDev[dev.id] = inactiveEntry;
-      perHandle[dev.github_handle] = inactiveEntry;
       continue;
     }
     counts.totalActive += 1;
@@ -769,9 +769,10 @@ export async function getTodayStatus(
     perHandle[dev.github_handle] = entry;
   }
 
-  // off-today excludes inactive (they're not "off today" — they're off the team)
+  // perDev holds active devs only, so any non-working status is genuinely
+  // "off today" (on leave / half-day / public holiday / weekend).
   const offTodayList = Object.values(perDev)
-    .filter(d => d.status !== 'working' && d.status !== 'inactive')
+    .filter(d => d.status !== 'working')
     .sort((a, b) => a.display_name.localeCompare(b.display_name));
 
   return {

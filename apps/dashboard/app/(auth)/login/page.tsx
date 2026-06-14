@@ -38,7 +38,7 @@ export default function LoginPage() {
       >
         <div className="text-center mb-6">
           <h1 className="text-2xl font-semibold mb-1 tracking-tight text-ink">Team Dashboard</h1>
-          <p className="text-sm text-ink-faint">Boss-only daily team activity report</p>
+          <p className="text-sm text-ink-faint">Charlie&apos;s daily team activity report</p>
         </div>
 
         <div>
