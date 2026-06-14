@@ -6,6 +6,10 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export type ActionResult = { ok: true } | { ok: false, error: string };
 
 const MAX_NAME_LEN = 120;
+const MAX_TENURE_NOTE_LEN = 280;
+
+export type DevLevel = 'intern' | 'junior' | 'senior' | 'freelancer';
+const VALID_LEVELS: readonly DevLevel[] = ['intern', 'junior', 'senior', 'freelancer'];
 
 async function authedSupabase() {
   const supabase = createSupabaseServerClient();
@@ -37,6 +41,134 @@ export async function updateDisplayName(
   const { data, error } = await supabase
     .from('developers')
     .update({ display_name: trimmed })
+    .eq('id', devId)
+    .select('id');
+
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: 'Update affected 0 rows — RLS may be blocking. Check policies.',
+    };
+  }
+
+  revalidatePath('/');
+  revalidatePath('/admin/team');
+  return { ok: true };
+}
+
+export async function updateLevel(
+  devId: string,
+  level: DevLevel | null,
+): Promise<ActionResult> {
+  const { supabase, error: authError } = await authedSupabase();
+  if (!supabase) return { ok: false, error: authError ?? 'Auth failed' };
+
+  if (level !== null && !VALID_LEVELS.includes(level)) {
+    return { ok: false, error: `Invalid level: ${level}` };
+  }
+
+  const { data, error } = await supabase
+    .from('developers')
+    .update({ level })
+    .eq('id', devId)
+    .select('id');
+
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: 'Update affected 0 rows — RLS may be blocking. Check policies.',
+    };
+  }
+
+  revalidatePath('/');
+  revalidatePath('/admin/team');
+  return { ok: true };
+}
+
+export async function updateTenureNote(
+  devId: string,
+  note: string,
+): Promise<ActionResult> {
+  const { supabase, error: authError } = await authedSupabase();
+  if (!supabase) return { ok: false, error: authError ?? 'Auth failed' };
+
+  const trimmed = note.trim();
+  if (trimmed.length > MAX_TENURE_NOTE_LEN) {
+    return {
+      ok: false,
+      error: `Tenure note must be ${MAX_TENURE_NOTE_LEN} characters or fewer`,
+    };
+  }
+  // Store empty string as NULL so "unset" is consistent in the DB.
+  const value = trimmed.length === 0 ? null : trimmed;
+
+  const { data, error } = await supabase
+    .from('developers')
+    .update({ tenure_note: value })
+    .eq('id', devId)
+    .select('id');
+
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: 'Update affected 0 rows — RLS may be blocking. Check policies.',
+    };
+  }
+
+  revalidatePath('/');
+  revalidatePath('/admin/team');
+  return { ok: true };
+}
+
+export async function setReviewer(
+  devId: string,
+  isReviewer: boolean,
+): Promise<ActionResult> {
+  const { supabase, error: authError } = await authedSupabase();
+  if (!supabase) return { ok: false, error: authError ?? 'Auth failed' };
+
+  const { data, error } = await supabase
+    .from('developers')
+    .update({ is_reviewer: isReviewer })
+    .eq('id', devId)
+    .select('id');
+
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: 'Update affected 0 rows — RLS may be blocking. Check policies.',
+    };
+  }
+
+  revalidatePath('/');
+  revalidatePath('/admin/team');
+  return { ok: true };
+}
+
+export async function updateOwnedSystems(
+  devId: string,
+  systems: string[],
+): Promise<ActionResult> {
+  const { supabase, error: authError } = await authedSupabase();
+  if (!supabase) return { ok: false, error: authError ?? 'Auth failed' };
+
+  // Normalise: trim each, drop empties, de-dupe while preserving order.
+  const cleaned: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of systems) {
+    const s = raw.trim();
+    if (s.length === 0 || seen.has(s)) continue;
+    seen.add(s);
+    cleaned.push(s);
+  }
+
+  const { data, error } = await supabase
+    .from('developers')
+    .update({ owned_systems: cleaned })
     .eq('id', devId)
     .select('id');
 

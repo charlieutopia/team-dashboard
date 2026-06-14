@@ -10,13 +10,17 @@ interface DeveloperRow {
   display_name: string;
   email: string | null;
   active: boolean;
+  level: 'intern' | 'junior' | 'senior' | 'freelancer' | null;
+  tenure_note: string | null;
+  is_reviewer: boolean;
+  owned_systems: string[];
 }
 
 export default async function AdminTeamPage() {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from('developers')
-    .select('id, github_handle, display_name, email, active')
+    .select('id, github_handle, display_name, email, active, level, tenure_note, is_reviewer, owned_systems')
     .order('active', { ascending: false })
     .order('display_name', { ascending: true });
 
@@ -47,7 +51,7 @@ export default async function AdminTeamPage() {
           {activeCount} active · {inactiveCount} inactive
         </p>
         <p className="text-[11px] text-ink-faint mt-1">
-          Edit short name (auto-saves on blur) or toggle active.
+          Edit short name, level, tenure note, owned systems (auto-save on blur) or toggle active / reviewer.
         </p>
       </header>
 

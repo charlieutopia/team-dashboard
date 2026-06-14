@@ -7,6 +7,7 @@ import { DayTimelineCard } from '@/components/DayTimelineCard';
 import { WeeklyDigestCard } from '@/components/WeeklyDigestCard';
 import { MonthlyDigestCard } from '@/components/MonthlyDigestCard';
 import { KpiStrip } from '@/components/KpiStrip';
+import { LevelChip } from '@/components/LevelChip';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,7 +63,18 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
           ← back to all
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">@{developer.github_handle}</h1>
-        <p className="text-sm text-ink-muted">{developer.display_name}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-sm text-ink-muted">{developer.display_name}</p>
+          <LevelChip level={developer.level} />
+        </div>
+        {developer.tenure_note && (
+          <p className="text-[11px] text-ink-faint mt-0.5">{developer.tenure_note}</p>
+        )}
+        {developer.owned_systems.length > 0 && (
+          <p className="text-[11px] text-ink-faint mt-0.5">
+            Owns: {developer.owned_systems.join(', ')}
+          </p>
+        )}
         <p className="text-[11px] text-ink-faint mt-1">
           {isWindowClamped
             ? `${effectiveWindowDays}-day window · since ${earliestDailyReport}`

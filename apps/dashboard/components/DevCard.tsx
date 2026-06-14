@@ -3,6 +3,7 @@ import { DevAvatar } from './DevAvatar';
 import { TodayStatusPill } from './TodayStatusPill';
 import { DevBranchList } from './DevBranchList';
 import { DevSignalsStrip } from './DevSignalsStrip';
+import { LevelChip } from './LevelChip';
 import type {
   ActiveBranchRow,
   CadenceEntry,
@@ -49,6 +50,7 @@ export function DevCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-[15px] font-semibold leading-tight tracking-tight text-ink">{report.display_name}</h2>
+              <LevelChip level={report.level} />
               {todayStatus && <TodayStatusPill status={todayStatus} />}
             </div>
             <p className="text-xs text-ink-faint">@{report.developer_handle}</p>
@@ -122,6 +124,7 @@ function FailedCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-[15px] font-semibold leading-tight tracking-tight text-ink">{report.display_name}</h2>
+              <LevelChip level={report.level} />
               {todayStatus && <TodayStatusPill status={todayStatus} />}
             </div>
             <p className="text-xs text-ink-faint">@{report.developer_handle}</p>

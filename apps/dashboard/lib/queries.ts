@@ -1,9 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+export type DevLevel = 'intern' | 'junior' | 'senior' | 'freelancer';
+
 export interface DevReportRow {
   developer_id: string;
   developer_handle: string;
   display_name: string;
+  level: DevLevel | null;
   report_date: string;
   summary: string | null;
   metrics: any;
@@ -68,7 +71,7 @@ export async function getLatestReports(supabase: SupabaseClient): Promise<Latest
       generator_version,
       parse_failed,
       error_msg,
-      developers!inner ( github_handle, display_name, active )
+      developers!inner ( github_handle, display_name, active, level )
     `)
     .eq('report_date', reportDate)
     // Inactive devs live only in /admin/team — never on the home list.
@@ -97,6 +100,7 @@ export async function getLatestReports(supabase: SupabaseClient): Promise<Latest
     developer_id: r.developer_id,
     developer_handle: r.developers.github_handle,
     display_name: r.developers.display_name,
+    level: r.developers.level ?? null,
     report_date: r.report_date,
     summary: r.summary,
     metrics: r.metrics,
@@ -161,7 +165,14 @@ export interface DevTimelineTotals {
 }
 
 export interface DevTimelineResult {
-  developer: { id: string; github_handle: string; display_name: string };
+  developer: {
+    id: string;
+    github_handle: string;
+    display_name: string;
+    level: DevLevel | null;
+    tenure_note: string | null;
+    owned_systems: string[];
+  };
   days: DevTimelineDay[];
   totals: DevTimelineTotals;
   windowDays: number; // requested window (e.g. 30)
@@ -191,20 +202,32 @@ export async function getDevTimeline(
   //    renders one (the page calls notFound() on a null result).
   const { data: devRow, error: devErr } = await supabase
     .from('developers')
-    .select('id, github_handle, display_name, active')
+    .select('id, github_handle, display_name, active, level, tenure_note, owned_systems')
     .eq('github_handle', githubHandle)
     .maybeSingle();
 
   if (devErr) throw devErr;
   if (!devRow) return null;
 
-  const developer = devRow as {
+  const developerRaw = devRow as {
     id: string;
     github_handle: string;
     display_name: string;
     active: boolean;
+    level: DevLevel | null;
+    tenure_note: string | null;
+    owned_systems: string[] | null;
   };
-  if (!developer.active) return null;
+  if (!developerRaw.active) return null;
+
+  const developer = {
+    id: developerRaw.id,
+    github_handle: developerRaw.github_handle,
+    display_name: developerRaw.display_name,
+    level: developerRaw.level ?? null,
+    tenure_note: developerRaw.tenure_note ?? null,
+    owned_systems: developerRaw.owned_systems ?? [],
+  };
 
   // 2a. Find the earliest daily_report date for this dev — used to clamp the
   //     window so KPIs aren't computed against a "should have worked" range
