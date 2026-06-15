@@ -33,7 +33,8 @@ export function DevList({
   }, [rows, q]);
 
   return (
-    <>
+    // Centered reading-width column so full-width rows stay readable on big monitors.
+    <div className="mx-auto max-w-4xl">
       {/* Search spans the full container width. */}
       <div className="px-4 pt-3 pb-3">
         <div className="relative">
@@ -68,8 +69,8 @@ export function DevList({
           No one matches &ldquo;{query}&rdquo;.
         </div>
       ) : (
-        // Single column on phone; multi-column grid on wider screens.
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 px-3 pb-3">
+        // Vertical stack of full-width split rows — one person per row.
+        <div className="flex flex-col gap-3 px-3 pb-3">
           {filtered.map(r => (
             <DevCard
               key={r.developer_id}
@@ -81,6 +82,6 @@ export function DevList({
           ))}
         </div>
       )}
-    </>
+    </div>
   );
 }
