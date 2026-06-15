@@ -152,6 +152,21 @@ function makeMockSb(cfg: MockSbConfig = {}) {
     }
     if (table === "developers") {
       return {
+        // Step 0 ended-developer auto-flip:
+        //   .update({ active: false }).lt("end_date", klDate)
+        //     .not("end_date", "is", null).eq("active", true).select("id")
+        // No dev in the test fixtures carries an end_date, so the flip matches
+        // zero rows. The chain just needs to resolve to an empty result.
+        update: vi.fn(() => {
+          const result = Promise.resolve({ data: [], error: null });
+          const chain: any = {
+            lt: vi.fn(() => chain),
+            not: vi.fn(() => chain),
+            eq: vi.fn(() => chain),
+            select: vi.fn(() => result),
+          };
+          return chain;
+        }),
         select: vi.fn((cols: string) => {
           // Two access patterns:
           // (a) .select("id, display_name").eq("github_handle", X).maybeSingle()

@@ -20,6 +20,18 @@ import { DevSignalsStrip } from '@/components/DevSignalsStrip';
 
 export const dynamic = 'force-dynamic';
 
+/** "Mon D, YYYY" label from a YYYY-MM-DD string (no day drift). */
+function formatEndDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-').map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 export default async function DevTimelinePage({ params }: { params: { handle: string } }) {
   const supabase = createSupabaseServerClient();
   const [result, weekly, monthly, branchesRes, prsRes, cadenceByDev] = await Promise.all([
@@ -74,6 +86,13 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
 
   return (
     <main className="min-h-screen pb-8">
+      {developer.active === false && (
+        <div className="px-4 py-2 bg-card border-b border-line text-[11px] text-ink-faint">
+          Inactive — no longer on the team.
+          {developer.end_date ? ` Ended ${formatEndDate(developer.end_date)}.` : ''}{' '}
+          History below.
+        </div>
+      )}
       <header className="px-4 pt-6 pb-4 sticky top-0 bg-app/85 backdrop-blur z-10 border-b border-line">
         <Link
           href="/"

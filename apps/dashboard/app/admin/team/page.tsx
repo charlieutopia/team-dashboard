@@ -14,13 +14,14 @@ interface DeveloperRow {
   tenure_note: string | null;
   is_reviewer: boolean;
   owned_systems: string[];
+  end_date: string | null;
 }
 
 export default async function AdminTeamPage() {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from('developers')
-    .select('id, github_handle, display_name, email, active, level, tenure_note, is_reviewer, owned_systems')
+    .select('id, github_handle, display_name, email, active, level, tenure_note, is_reviewer, owned_systems, end_date')
     .order('active', { ascending: false })
     .order('display_name', { ascending: true });
 

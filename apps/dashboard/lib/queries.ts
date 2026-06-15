@@ -7,6 +7,8 @@ export interface DevReportRow {
   developer_handle: string;
   display_name: string;
   level: DevLevel | null;
+  /** YYYY-MM-DD when this person's engagement ends, or null if open-ended. */
+  end_date: string | null;
   report_date: string;
   summary: string | null;
   metrics: any;
@@ -36,6 +38,16 @@ const TRAJECTORY_ORDER: Record<string, number> = {
 
 function computeKlDate(now: Date): string {
   return new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().split('T')[0]!;
+}
+
+/**
+ * Today's calendar date in Kuala Lumpur as a YYYY-MM-DD string.
+ *
+ * Shared helper so server actions (end-date handling) and the dashboard agree
+ * on what "today" means without each re-deriving the KL offset.
+ */
+export function klTodayDate(now: Date = new Date()): string {
+  return computeKlDate(now);
 }
 
 /**
@@ -91,7 +103,7 @@ export async function getLatestReports(supabase: SupabaseClient): Promise<Latest
       generator_version,
       parse_failed,
       error_msg,
-      developers!inner ( github_handle, display_name, active, level )
+      developers!inner ( github_handle, display_name, active, level, end_date )
     `)
     .eq('report_date', reportDate)
     // Inactive devs live only in /admin/team — never on the home list.
@@ -121,6 +133,7 @@ export async function getLatestReports(supabase: SupabaseClient): Promise<Latest
     developer_handle: r.developers.github_handle,
     display_name: r.developers.display_name,
     level: r.developers.level ?? null,
+    end_date: r.developers.end_date ?? null,
     report_date: r.report_date,
     summary: r.summary,
     metrics: r.metrics,
@@ -189,6 +202,8 @@ export interface DevTimelineResult {
     id: string;
     github_handle: string;
     display_name: string;
+    active: boolean;
+    end_date: string | null;
     level: DevLevel | null;
     tenure_note: string | null;
     owned_systems: string[];
@@ -217,12 +232,13 @@ export async function getDevTimeline(
 ): Promise<DevTimelineResult | null> {
   const klToday = computeKlDate(new Date());
 
-  // 1. Find the developer. Inactive devs live only in /admin/team — treat a
-  //    drill-down to an inactive handle as not-found so /dev/[handle] never
-  //    renders one (the page calls notFound() on a null result).
+  // 1. Find the developer. Inactive devs are hidden from the home + week lists
+  //    but their detail page still renders (history look-back) — the page shows
+  //    an "inactive" banner above the timeline. Only a missing handle is
+  //    not-found (the page calls notFound() on a null result).
   const { data: devRow, error: devErr } = await supabase
     .from('developers')
-    .select('id, github_handle, display_name, active, level, tenure_note, owned_systems')
+    .select('id, github_handle, display_name, active, end_date, level, tenure_note, owned_systems')
     .eq('github_handle', githubHandle)
     .maybeSingle();
 
@@ -234,16 +250,18 @@ export async function getDevTimeline(
     github_handle: string;
     display_name: string;
     active: boolean;
+    end_date: string | null;
     level: DevLevel | null;
     tenure_note: string | null;
     owned_systems: string[] | null;
   };
-  if (!developerRaw.active) return null;
 
   const developer = {
     id: developerRaw.id,
     github_handle: developerRaw.github_handle,
     display_name: developerRaw.display_name,
+    active: developerRaw.active,
+    end_date: developerRaw.end_date ?? null,
     level: developerRaw.level ?? null,
     tenure_note: developerRaw.tenure_note ?? null,
     owned_systems: developerRaw.owned_systems ?? [],

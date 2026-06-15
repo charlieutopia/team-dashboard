@@ -2,8 +2,21 @@
 
 import { revalidatePath } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { klTodayDate } from '@/lib/queries';
 
 export type ActionResult = { ok: true } | { ok: false, error: string };
+
+/** Strict YYYY-MM-DD shape + real-calendar-date check (rejects 2026-13-40). */
+function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return (
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() === m - 1 &&
+    dt.getUTCDate() === d
+  );
+}
 
 const MAX_NAME_LEN = 120;
 const MAX_TENURE_NOTE_LEN = 280;
@@ -169,6 +182,49 @@ export async function updateOwnedSystems(
   const { data, error } = await supabase
     .from('developers')
     .update({ owned_systems: cleaned })
+    .eq('id', devId)
+    .select('id');
+
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error: 'Update affected 0 rows — RLS may be blocking. Check policies.',
+    };
+  }
+
+  revalidatePath('/');
+  revalidatePath('/admin/team');
+  return { ok: true };
+}
+
+export async function updateEndDate(
+  devId: string,
+  endDate: string | null,
+): Promise<ActionResult> {
+  const { supabase, error: authError } = await authedSupabase();
+  if (!supabase) return { ok: false, error: authError ?? 'Auth failed' };
+
+  // '' (cleared input) means "no end date".
+  const trimmed = (endDate ?? '').trim();
+  const value = trimmed.length === 0 ? null : trimmed;
+
+  if (value !== null && !isValidIsoDate(value)) {
+    return { ok: false, error: 'End date must be a valid YYYY-MM-DD date' };
+  }
+
+  // A past (or today's) end date means the person has already ended → flip
+  // active=false in the same write so they immediately drop off the main
+  // views. A future end date leaves active untouched; the daily scanner flips
+  // it the morning after it passes.
+  const update: { end_date: string | null; active?: boolean } = { end_date: value };
+  if (value !== null && value <= klTodayDate()) {
+    update.active = false;
+  }
+
+  const { data, error } = await supabase
+    .from('developers')
+    .update(update)
     .eq('id', devId)
     .select('id');
 

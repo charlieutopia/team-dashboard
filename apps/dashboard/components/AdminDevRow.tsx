@@ -1,15 +1,36 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
 import {
   setActive,
   setReviewer,
   updateDisplayName,
+  updateEndDate,
   updateLevel,
   updateOwnedSystems,
   updateTenureNote,
   type DevLevel,
 } from '@/app/admin/team/actions';
+
+/** Today's KL date as YYYY-MM-DD — for the "ended vs ends" hint. */
+function klTodayStr(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kuala_Lumpur',
+  }).format(new Date());
+}
+
+/** "Mon 9, 2026" style label from a YYYY-MM-DD string (no day drift). */
+function formatEndDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-').map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
 
 interface Dev {
   id: string;
@@ -21,6 +42,7 @@ interface Dev {
   tenure_note: string | null;
   is_reviewer: boolean;
   owned_systems: string[];
+  end_date: string | null;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -45,6 +67,8 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
   const [systemsCommitted, setSystemsCommitted] = useState(
     (dev.owned_systems ?? []).join(', '),
   );
+  const [endDate, setEndDate] = useState(dev.end_date ?? '');
+  const [endDateCommitted, setEndDateCommitted] = useState(dev.end_date ?? '');
 
   const [nameSave, setNameSave] = useState<SaveState>('idle');
   const [activeSave, setActiveSave] = useState<SaveState>('idle');
@@ -52,6 +76,7 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
   const [levelSave, setLevelSave] = useState<SaveState>('idle');
   const [tenureSave, setTenureSave] = useState<SaveState>('idle');
   const [systemsSave, setSystemsSave] = useState<SaveState>('idle');
+  const [endDateSave, setEndDateSave] = useState<SaveState>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -61,14 +86,16 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
     reviewerSave === 'saving' ||
     levelSave === 'saving' ||
     tenureSave === 'saving' ||
-    systemsSave === 'saving';
+    systemsSave === 'saving' ||
+    endDateSave === 'saving';
   const anySaved =
     nameSave === 'saved' ||
     activeSave === 'saved' ||
     reviewerSave === 'saved' ||
     levelSave === 'saved' ||
     tenureSave === 'saved' ||
-    systemsSave === 'saved';
+    systemsSave === 'saved' ||
+    endDateSave === 'saved';
 
   // Auto-clear "saved" badges after 1.5s
   useEffect(() => {
@@ -80,6 +107,7 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
       setLevelSave(s => (s === 'saved' ? 'idle' : s));
       setTenureSave(s => (s === 'saved' ? 'idle' : s));
       setSystemsSave(s => (s === 'saved' ? 'idle' : s));
+      setEndDateSave(s => (s === 'saved' ? 'idle' : s));
     }, 1500);
     return () => clearTimeout(t);
   }, [anySaved]);
@@ -202,6 +230,38 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
     });
   }
 
+  function commitEndDate() {
+    const next = endDate.trim();
+    if (next === endDateCommitted.trim()) return; // no change
+    const value = next.length === 0 ? null : next;
+    setEndDateSave('saving');
+    setErrorMsg(null);
+    startTransition(async () => {
+      const result = await updateEndDate(dev.id, value);
+      if (result.ok) {
+        setEndDateCommitted(next);
+        setEndDateSave('saved');
+        // A past/today end date flips the person inactive server-side. Mirror
+        // that locally so the Active toggle reflects reality without a reload.
+        if (value !== null && value <= klTodayStr()) {
+          setActiveLocal(false);
+        }
+      } else {
+        setErrorMsg(result.error);
+        setEndDateSave('error');
+        setEndDate(endDateCommitted); // revert
+      }
+    });
+  }
+
+  // Hint shown beside the date input: past → "ended", future → "ends".
+  const endHint =
+    endDateCommitted.length > 0
+      ? endDateCommitted <= klTodayStr()
+        ? `ended ${formatEndDate(endDateCommitted)}`
+        : `ends ${formatEndDate(endDateCommitted)}`
+      : null;
+
   return (
     <div className={`px-4 py-3 ${!active ? 'opacity-70' : ''}`}>
       <div className="flex items-start gap-3">
@@ -224,7 +284,15 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
             aria-label={`Short name for ${dev.github_handle}`}
             disabled={isPending}
           />
-          <p className="text-xs text-ink-faint mt-0.5">@{dev.github_handle}</p>
+          <p className="text-xs text-ink-faint mt-0.5">
+            @{dev.github_handle}
+            <Link
+              href={`/dev/${dev.github_handle}`}
+              className="ml-2 text-blue-600 hover:text-blue-700"
+            >
+              History →
+            </Link>
+          </p>
           {dev.email && (
             <p className="text-[11px] text-ink-faint mt-0.5 truncate">{dev.email}</p>
           )}
@@ -343,6 +411,28 @@ export function AdminDevRow({ dev }: { dev: Dev }) {
             aria-label={`Owned systems for ${dev.display_name}`}
             disabled={isPending}
           />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wide text-ink-faint">
+            End date
+          </span>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              onBlur={commitEndDate}
+              className="text-sm text-ink bg-card border border-line rounded-md px-2 py-1.5 focus:border-blue-500 focus:outline-none disabled:opacity-50"
+              aria-label={`End date for ${dev.display_name}`}
+              disabled={isPending}
+            />
+            {endHint && (
+              <span className="text-[11px] text-ink-faint whitespace-nowrap">
+                {endHint}
+              </span>
+            )}
+          </div>
         </label>
       </div>
 
