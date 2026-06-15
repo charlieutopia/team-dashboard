@@ -1,3 +1,5 @@
+'use client';
+
 import { CadenceSparkline } from './CadenceSparkline';
 import type { CadenceEntry, OpenPrRow } from '@/lib/queries';
 

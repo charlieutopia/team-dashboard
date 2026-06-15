@@ -38,6 +38,26 @@ function computeKlDate(now: Date): string {
   return new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().split('T')[0]!;
 }
 
+/**
+ * ISO-8601 week number (1–53) for a KL calendar date string (YYYY-MM-DD).
+ *
+ * Pass the same `klToday` value the queries already compute so the week number
+ * is anchored to Kuala Lumpur's "today", not the server's UTC day. ISO weeks
+ * start on Monday and week 1 is the week containing the first Thursday of the
+ * year (equivalently, the week containing January 4th).
+ */
+export function isoWeek(klDate: string): number {
+  const [y, m, d] = klDate.split('-').map(Number) as [number, number, number];
+  // Work in UTC to avoid local-timezone drift; the input is already KL-local.
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  // Shift to the Thursday of the current ISO week (ISO weekday: Mon=1..Sun=7).
+  const isoDay = dt.getUTCDay() === 0 ? 7 : dt.getUTCDay();
+  dt.setUTCDate(dt.getUTCDate() + 4 - isoDay);
+  // First day of that ISO year.
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  return Math.ceil(((dt.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
 export async function getLatestReports(supabase: SupabaseClient): Promise<LatestReportsResult> {
   const klToday = computeKlDate(new Date());
 

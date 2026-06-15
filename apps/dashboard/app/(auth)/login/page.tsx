@@ -37,8 +37,8 @@ export default function LoginPage() {
         autoComplete="on"
       >
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-semibold mb-1 tracking-tight text-ink">Team Dashboard</h1>
-          <p className="text-sm text-ink-faint">Charlie&apos;s daily team activity report</p>
+          <h1 className="font-display text-2xl font-semibold mb-1 tracking-tight text-ink">Team Dashboard</h1>
+          <p className="text-sm text-ink-faint">Charlie&apos;s team activity</p>
         </div>
 
         <div>

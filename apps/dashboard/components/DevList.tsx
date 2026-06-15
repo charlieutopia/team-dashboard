@@ -6,7 +6,6 @@ import type {
   ActiveBranchRow,
   CadenceEntry,
   DevReportRow,
-  OpenPrRow,
   TodayDevStatus,
 } from '@/lib/queries';
 
@@ -14,13 +13,11 @@ export function DevList({
   rows,
   todayStatusByDev,
   branchesByDev,
-  prsByDev,
   cadenceByDev,
 }: {
   rows: DevReportRow[];
   todayStatusByDev?: Record<string, TodayDevStatus>;
   branchesByDev?: Record<string, ActiveBranchRow[]>;
-  prsByDev?: Record<string, OpenPrRow[]>;
   cadenceByDev?: Record<string, CadenceEntry>;
 }) {
   const [query, setQuery] = useState('');
@@ -37,7 +34,8 @@ export function DevList({
 
   return (
     <>
-      <div className="px-4 pt-2 pb-3">
+      {/* Search spans the full container width. */}
+      <div className="px-4 pt-3 pb-3">
         <div className="relative">
           <input
             type="text"
@@ -70,14 +68,14 @@ export function DevList({
           No one matches &ldquo;{query}&rdquo;.
         </div>
       ) : (
-        <div>
+        // Single column on phone; multi-column grid on wider screens.
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 px-3 pb-3">
           {filtered.map(r => (
             <DevCard
               key={r.developer_id}
               report={r}
               todayStatus={todayStatusByDev?.[r.developer_id]}
               branches={branchesByDev?.[r.developer_id]}
-              prs={prsByDev?.[r.developer_id]}
               cadence={cadenceByDev?.[r.developer_id]}
             />
           ))}

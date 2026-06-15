@@ -4,7 +4,6 @@ import {
   getActiveBranchesByDev,
   getCadenceByDev,
   getLatestReports,
-  getOpenPrsByDev,
   getTodayStatus,
 } from '@/lib/queries';
 import { DevList } from '@/components/DevList';
@@ -14,73 +13,74 @@ export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const supabase = createSupabaseServerClient();
-  const [{ reportDate, klToday, rows }, today, branches, prs, cadenceByDev] =
+  const [{ reportDate, klToday, rows }, today, branches, cadenceByDev] =
     await Promise.all([
       getLatestReports(supabase),
       getTodayStatus(supabase),
       getActiveBranchesByDev(supabase),
-      getOpenPrsByDev(supabase),
       getCadenceByDev(supabase),
     ]);
-  // Suppress per-card sections pre-bootstrap (table empty) so we don't
-  // mislead Charlie with empty pills before the scanner has ever populated.
+  // Suppress the per-card branch line pre-bootstrap (table empty) so we don't
+  // mislead Charlie before the scanner has ever populated.
   const branchesByDev = branches.populated ? branches.byDev : undefined;
-  const prsByDev = prs.populated ? prs.byDev : undefined;
 
   const isStale = reportDate !== null && reportDate < klToday;
-  const succeededCount = rows.filter(r => !r.parse_failed).length;
   const failedCount = rows.filter(r => r.parse_failed).length;
 
   return (
-    <main className="min-h-screen pb-8">
-      <header className="px-4 pt-6 pb-4 sticky top-0 bg-app/85 backdrop-blur z-10 border-b border-line">
-        <p className="text-[11px] text-ink-faint uppercase tracking-wide">
-          {reportDate ? (
-            <>Report · <span className="font-medium text-ink-muted normal-case tracking-normal">{reportDate}</span> {isStale && <span className="text-amber-600 normal-case tracking-normal">(today {klToday}&apos;s run not yet generated)</span>}</>
-          ) : (
-            <>No reports generated yet</>
-          )}
-        </p>
-        <div className="flex items-center justify-between gap-3 mt-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Team Report</h1>
-          <div className="flex items-center gap-3 text-xs whitespace-nowrap">
-            <Link
-              href="/admin/team"
-              className="text-blue-600 hover:text-blue-700"
-            >
+    <main className="min-h-screen pb-10">
+      {/* Full-width sticky brand bar. */}
+      <header className="px-5 pt-5 pb-3 sticky top-0 bg-app/85 backdrop-blur z-10 border-b border-line">
+        <div className="mx-auto max-w-6xl flex items-center justify-between gap-3">
+          <span className="text-[15px] font-bold tracking-tight text-ink">
+            Team Dashboard
+          </span>
+          <nav className="flex items-center gap-4 text-[13px] whitespace-nowrap">
+            <Link href="/admin/team" className="text-blue-600 hover:text-blue-700">
               Manage team
             </Link>
-            <Link
-              href="/week"
-              className="text-blue-600 hover:text-blue-700"
-            >
+            <Link href="/week" className="text-blue-600 hover:text-blue-700">
               This week →
             </Link>
-          </div>
+          </nav>
         </div>
-        {rows.length > 0 && (
-          <p className="text-xs text-ink-faint mt-1">
-            {succeededCount} succeeded {failedCount > 0 && <span className="text-red-600">· {failedCount} failed</span>}
-          </p>
-        )}
       </header>
 
+      {/* Full-width banner; its inner content is centered to the container. */}
       <TodayHeader today={today} />
 
-      {rows.length === 0 ? (
-        <div className="px-6 py-12 text-center text-sm text-ink-faint">
-          <p className="mb-2">No reports available.</p>
-          <p>Run <code className="font-mono">pnpm scanner:daily</code> locally to generate today&apos;s reports.</p>
-        </div>
-      ) : (
-        <DevList
-          rows={rows}
-          todayStatusByDev={today.perDev}
-          branchesByDev={branchesByDev}
-          prsByDev={prsByDev}
-          cadenceByDev={cadenceByDev}
-        />
-      )}
+      {/* Centered container holds the status notice, search, and card grid. */}
+      <div className="mx-auto max-w-6xl">
+        {rows.length > 0 && (isStale || failedCount > 0) && (
+          <p className="px-5 pt-3 text-[13px] text-ink-faint">
+            {isStale && (
+              <span className="text-amber-600">
+                Showing {reportDate} — today&apos;s update hasn&apos;t run yet.
+              </span>
+            )}
+            {isStale && failedCount > 0 && ' · '}
+            {failedCount > 0 && (
+              <span className="text-red-600">
+                {failedCount} update{failedCount === 1 ? '' : 's'} failed to generate
+              </span>
+            )}
+          </p>
+        )}
+
+        {rows.length === 0 ? (
+          <div className="px-6 py-12 text-center text-sm text-ink-faint">
+            <p className="mb-2">No activity yet.</p>
+            <p>Run <code className="font-mono">pnpm scanner:daily</code> locally to generate today&apos;s update.</p>
+          </div>
+        ) : (
+          <DevList
+            rows={rows}
+            todayStatusByDev={today.perDev}
+            branchesByDev={branchesByDev}
+            cadenceByDev={cadenceByDev}
+          />
+        )}
+      </div>
     </main>
   );
 }
