@@ -502,6 +502,9 @@ export interface WeeklyDigestRow {
   developer_id: string;
   developer_handle: string;
   display_name: string;
+  /** Seniority level for the card's LevelChip. Null when the source query
+   *  doesn't fetch it (e.g. the per-dev digest on /dev/[handle]). */
+  level: DevLevel | null;
   week_start_date: string;
   summary: string | null;
   momentum: Momentum | null;
@@ -545,11 +548,16 @@ export async function getDevWeeklyDigest(
   if (error) throw error;
   if (!data) return null;
 
-  const row = data as Omit<WeeklyDigestRow, 'developer_id' | 'developer_handle' | 'display_name'>;
+  const row = data as Omit<
+    WeeklyDigestRow,
+    'developer_id' | 'developer_handle' | 'display_name' | 'level'
+  >;
   return {
     developer_id: developer.id,
     developer_handle: developer.github_handle,
     display_name: developer.display_name,
+    // This per-dev query doesn't fetch level; the card renders no LevelChip.
+    level: null,
     week_start_date: row.week_start_date,
     summary: row.summary,
     momentum: row.momentum,
@@ -560,6 +568,33 @@ export async function getDevWeeklyDigest(
   };
 }
 
+/**
+ * Shift a Monday week_start_date (YYYY-MM-DD) by N weeks. The stored value is
+ * already a KL Monday, so plain UTC date math keeps it on a Monday without
+ * any timezone day-drift (mirrors the shiftKlDate helper above).
+ */
+export function shiftWeekStart(weekStartDate: string, deltaWeeks: number): string {
+  return shiftKlDate(weekStartDate, deltaWeeks * 7);
+}
+
+/**
+ * The most-recent week_start_date that has any weekly_reports rows, or null
+ * when none exist. Used by the /week nav to know whether "Next week" should be
+ * enabled (you can't browse forward past the latest available week).
+ */
+export async function getLatestWeekStartDate(
+  supabase: SupabaseClient,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('weekly_reports')
+    .select('week_start_date')
+    .order('week_start_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as { week_start_date: string } | null)?.week_start_date ?? null;
+}
+
 export interface AllWeeklyDigestsResult {
   weekStartDate: string | null;
   rows: WeeklyDigestRow[];
@@ -567,24 +602,19 @@ export interface AllWeeklyDigestsResult {
 
 export async function getAllWeeklyDigests(
   supabase: SupabaseClient,
+  weekStartDate?: string,
 ): Promise<AllWeeklyDigestsResult> {
-  // Find most-recent week_start_date that has any rows
-  const { data: latest, error: dateErr } = await supabase
-    .from('weekly_reports')
-    .select('week_start_date')
-    .order('week_start_date', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (dateErr) throw dateErr;
-  const weekStartDate = (latest as { week_start_date: string } | null)?.week_start_date ?? null;
-  if (!weekStartDate) return { weekStartDate: null, rows: [] };
+  // Default to the most-recent week that has any rows (the prior behavior).
+  // An explicit weekStartDate (a KL Monday) lets the page browse past weeks.
+  const targetWeek = weekStartDate ?? (await getLatestWeekStartDate(supabase));
+  if (!targetWeek) return { weekStartDate: null, rows: [] };
 
   const { data, error } = await supabase
     .from('weekly_reports')
     .select(
-      `developer_id, week_start_date, summary, momentum, top_themes, generator_version, parse_failed, error_msg, developers!inner ( github_handle, display_name, active )`,
+      `developer_id, week_start_date, summary, momentum, top_themes, generator_version, parse_failed, error_msg, developers!inner ( github_handle, display_name, active, level )`,
     )
-    .eq('week_start_date', weekStartDate)
+    .eq('week_start_date', targetWeek)
     // Inactive devs live only in /admin/team — never on the weekly surface.
     .eq('developers.active', true);
 
@@ -594,6 +624,7 @@ export async function getAllWeeklyDigests(
     developer_id: r.developer_id,
     developer_handle: r.developers.github_handle,
     display_name: r.developers.display_name,
+    level: r.developers.level ?? null,
     week_start_date: r.week_start_date,
     summary: r.summary,
     momentum: r.momentum,
@@ -611,7 +642,10 @@ export async function getAllWeeklyDigests(
     return oA - oB;
   });
 
-  return { weekStartDate, rows };
+  // Return targetWeek (not the input) so an explicitly-requested week with no
+  // rows still reports its date — the page renders the header + nav + empty
+  // state for that week so the viewer can navigate away.
+  return { weekStartDate: targetWeek, rows };
 }
 
 // ---- Monthly digests (Phase 2 Step 3) ----
