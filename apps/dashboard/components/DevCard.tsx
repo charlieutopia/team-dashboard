@@ -1,95 +1,133 @@
 import Link from 'next/link';
 import { DevAvatar } from './DevAvatar';
 import { TodayStatusPill } from './TodayStatusPill';
-import { DevBranchList } from './DevBranchList';
-import { DevSignalsStrip } from './DevSignalsStrip';
+import { currentBranchLine } from './DevBranchList';
 import { LevelChip } from './LevelChip';
 import type {
   ActiveBranchRow,
   CadenceEntry,
   DevReportRow,
-  OpenPrRow,
   TodayDevStatus,
 } from '@/lib/queries';
+
+/** "Mon 9" style short date from a YYYY-MM-DD string (UTC, no day drift). */
+function shortDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-').map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const month = dt.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+  return `${month} ${d}`;
+}
+
+/** Plain-English "vs last week" indicator from the cadence direction. */
+function cadenceWord(c?: CadenceEntry): { arrow: string; text: string; cls: string } | null {
+  if (!c || c.direction === 'no_data') return null;
+  if (c.direction === 'up') {
+    return { arrow: '↑', text: 'more than last week', cls: 'text-green-600' };
+  }
+  if (c.direction === 'down') {
+    return { arrow: '↓', text: 'less than last week', cls: 'text-amber-600' };
+  }
+  return { arrow: '≈', text: 'same as last week', cls: 'text-ink-faint' };
+}
+
+function CardMetrics({
+  report,
+  cadence,
+}: {
+  report: DevReportRow;
+  cadence?: CadenceEntry;
+}) {
+  const m = report.metrics ?? {};
+  const commits = m.commits_today ?? 0;
+  const files = (m.files_touched_today ?? []).length;
+  const cadenceInfo = cadenceWord(cadence);
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-muted">
+      <span className="font-medium text-ink">
+        {commits} commit{commits === 1 ? '' : 's'} · {files} file{files === 1 ? '' : 's'}
+      </span>
+      {cadenceInfo && (
+        <span className={`inline-flex items-center gap-1 ${cadenceInfo.cls}`}>
+          <span aria-hidden>·</span>
+          <span>
+            {cadenceInfo.arrow} {cadenceInfo.text}
+          </span>
+        </span>
+      )}
+      <span className="text-ink-faint">· updated {shortDate(report.report_date)}</span>
+    </div>
+  );
+}
 
 export function DevCard({
   report,
   todayStatus,
   branches,
-  prs,
   cadence,
 }: {
   report: DevReportRow;
   todayStatus?: TodayDevStatus;
   branches?: ActiveBranchRow[];
-  prs?: OpenPrRow[];
   cadence?: CadenceEntry;
 }) {
   if (report.parse_failed) {
-    return <FailedCard report={report} todayStatus={todayStatus} branches={branches} prs={prs} cadence={cadence} />;
+    return <FailedCard report={report} todayStatus={todayStatus} branches={branches} />;
   }
 
   const m = report.metrics ?? {};
   const drillHref = `/dev/${report.developer_handle}`;
+  // One compact line: the freshest active branch. Full list lives on the
+  // person page. Renders nothing when there is no active branch.
+  const branchLine = branches ? currentBranchLine(branches) : null;
 
   return (
-    <article className="rounded-xl border border-line bg-card p-5 mb-3 mx-3 shadow-sm relative">
-      <Link
-        href={drillHref}
-        className="block active:opacity-80 transition -m-5 mb-0 p-5 pb-0 rounded-t-xl"
-        aria-label={`View ${report.display_name}'s timeline`}
-      >
-        <span aria-hidden className="absolute top-4 right-4 text-ink-faint text-sm">→</span>
-        <header className="flex items-center gap-3 mb-4">
-          <DevAvatar
-            displayName={report.display_name}
-            handle={report.developer_handle}
-            size="md"
-            trajectory={report.trajectory}
-          />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-[15px] font-semibold leading-tight tracking-tight text-ink">{report.display_name}</h2>
-              <LevelChip level={report.level} />
-              {todayStatus && <TodayStatusPill status={todayStatus} />}
-            </div>
-            <p className="text-xs text-ink-faint">@{report.developer_handle}</p>
+    <Link
+      href={drillHref}
+      aria-label={`View ${report.display_name}'s timeline`}
+      className="group block h-full rounded-2xl border border-line bg-card p-5 shadow-sm relative transition hover:border-line-strong active:opacity-80"
+    >
+      <span aria-hidden className="absolute top-5 right-5 text-ink-faint text-sm">→</span>
+
+      {/* Row 1 — identity + status */}
+      <header className="flex items-center gap-3">
+        <DevAvatar
+          displayName={report.display_name}
+          handle={report.developer_handle}
+          size="md"
+          trajectory={report.trajectory}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-[17px] font-bold leading-tight tracking-tight text-ink">
+              {report.display_name}
+            </h2>
+            <span className="text-[13px] font-medium text-ink-faint">@{report.developer_handle}</span>
+            <LevelChip level={report.level} />
+            {todayStatus && <TodayStatusPill status={todayStatus} />}
           </div>
-        </header>
+        </div>
+      </header>
 
-        <p className="text-sm leading-relaxed text-ink-muted">{report.summary}</p>
+      {/* Row 2 — the hero: plain-English summary */}
+      <p className="mt-3 text-[15px] leading-relaxed text-ink line-clamp-2">
+        {report.summary}
+      </p>
 
-        <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
-          <div>
-            <dt className="text-ink-faint uppercase tracking-wide text-[10px]">Commits</dt>
-            <dd className="font-medium text-ink mt-0.5">{m.commits_today ?? 0} <span className="text-ink-faint font-normal">(was {m.commits_yesterday ?? 0})</span></dd>
-          </div>
-          <div>
-            <dt className="text-ink-faint uppercase tracking-wide text-[10px]">Files</dt>
-            <dd className="font-medium text-ink mt-0.5">{(m.files_touched_today ?? []).length}</dd>
-          </div>
-        </dl>
+      {/* Row 3 — metrics + vs-last-week + freshness */}
+      <CardMetrics report={report} cadence={cadence} />
 
-        {/* Lines of code is a secondary, demoted signal — never a headline. */}
-        <p className="mt-2 text-[10px] text-ink-faint">
-          Lines <span className="text-green-600">+{m.lines_added_today ?? 0}</span> <span className="text-red-600">-{m.lines_removed_today ?? 0}</span>
-        </p>
-      </Link>
+      {/* One compact line: what they're working on now. */}
+      {branchLine && (
+        <p className="mt-1.5 text-[12px] text-ink-faint truncate">{branchLine}</p>
+      )}
 
-      <DevSignalsStrip
-        prs={prs}
-        cadence={cadence}
-        githubHandle={report.developer_handle}
-        primaryRepo={branches?.[0]?.repo_full_name}
-      />
-
-      {branches && <DevBranchList branches={branches} />}
-
-      <details className="mt-3">
-        <summary className="text-xs text-blue-600 cursor-pointer select-none hover:text-blue-700">Tap to expand</summary>
-        <ExpandedSection report={report} />
-      </details>
-    </article>
+      {/* Lines of code — demoted to a whisper. */}
+      <p className="mt-1 text-[10px] text-ink-faint">
+        Lines <span className="text-green-600">+{m.lines_added_today ?? 0}</span>{' '}
+        <span className="text-red-600">−{m.lines_removed_today ?? 0}</span>
+      </p>
+    </Link>
   );
 }
 
@@ -97,63 +135,48 @@ function FailedCard({
   report,
   todayStatus,
   branches,
-  prs,
-  cadence,
 }: {
   report: DevReportRow;
   todayStatus?: TodayDevStatus;
   branches?: ActiveBranchRow[];
-  prs?: OpenPrRow[];
-  cadence?: CadenceEntry;
 }) {
+  const branchLine = branches ? currentBranchLine(branches) : null;
   return (
-    <article className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-5 mb-3 mx-3 shadow-sm relative">
-      <Link
-        href={`/dev/${report.developer_handle}`}
-        className="block -m-5 mb-0 p-5 pb-0 rounded-t-xl active:opacity-80 transition"
-        aria-label={`View ${report.display_name}'s timeline`}
-      >
-        <span aria-hidden className="absolute top-4 right-4 text-ink-faint text-sm">→</span>
-        <header className="flex items-center gap-3 mb-3">
-          <DevAvatar
-            displayName={report.display_name}
-            handle={report.developer_handle}
-            size="md"
-            trajectory="stuck"
-          />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-[15px] font-semibold leading-tight tracking-tight text-ink">{report.display_name}</h2>
-              <LevelChip level={report.level} />
-              {todayStatus && <TodayStatusPill status={todayStatus} />}
-            </div>
-            <p className="text-xs text-ink-faint">@{report.developer_handle}</p>
+    <Link
+      href={`/dev/${report.developer_handle}`}
+      aria-label={`View ${report.display_name}'s timeline`}
+      className="group block h-full rounded-2xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-5 shadow-sm relative transition active:opacity-80"
+    >
+      <span aria-hidden className="absolute top-5 right-5 text-ink-faint text-sm">→</span>
+      <header className="flex items-center gap-3">
+        <DevAvatar
+          displayName={report.display_name}
+          handle={report.developer_handle}
+          size="md"
+          trajectory="stuck"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-[17px] font-bold leading-tight tracking-tight text-ink">
+              {report.display_name}
+            </h2>
+            <span className="text-[13px] font-medium text-ink-faint">@{report.developer_handle}</span>
+            <LevelChip level={report.level} />
+            {todayStatus && <TodayStatusPill status={todayStatus} />}
           </div>
-        </header>
-        <p className="text-xs text-red-700 dark:text-red-300">
-          Report generation failed.
+        </div>
+      </header>
+      <p className="mt-3 text-[13px] text-red-700 dark:text-red-300">
+        Couldn&apos;t build today&apos;s update.
+      </p>
+      {report.error_msg && (
+        <p className="mt-1 text-xs font-mono text-red-600 dark:text-red-400 break-all">
+          {report.error_msg}
         </p>
-        {report.error_msg && (
-          <p className="mt-1 text-xs font-mono text-red-600 dark:text-red-400 break-all">
-            {report.error_msg}
-          </p>
-        )}
-      </Link>
-      <DevSignalsStrip
-        prs={prs}
-        cadence={cadence}
-        githubHandle={report.developer_handle}
-        primaryRepo={branches?.[0]?.repo_full_name}
-      />
-      {branches && <DevBranchList branches={branches} />}
-    </article>
-  );
-}
-
-function ExpandedSection({ report }: { report: DevReportRow }) {
-  return (
-    <div className="mt-3 space-y-3 text-xs">
-      <p className="text-ink-faint mt-2">Generator version: {report.generator_version}</p>
-    </div>
+      )}
+      {branchLine && (
+        <p className="mt-1.5 text-[12px] text-ink-faint truncate">{branchLine}</p>
+      )}
+    </Link>
   );
 }

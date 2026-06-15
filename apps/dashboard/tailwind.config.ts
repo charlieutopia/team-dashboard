@@ -4,6 +4,12 @@ export default {
   content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        // Everything readable — Hanken Grotesk: names, body, numbers, labels, chips.
+        sans: ['var(--font-body)', 'system-ui', 'sans-serif'],
+        // Editorial serif — Fraunces — ONLY for the single big banner date.
+        display: ['var(--font-display)', 'Georgia', 'serif'],
+      },
       colors: {
         app: 'rgb(var(--app) / <alpha-value>)',
         card: 'rgb(var(--card) / <alpha-value>)',

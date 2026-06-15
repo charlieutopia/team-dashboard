@@ -1,3 +1,5 @@
+'use client';
+
 import type { ActiveBranchRow } from '@/lib/queries';
 
 function relativeTime(iso: string | null, now: Date = new Date()): string {
@@ -70,6 +72,27 @@ function firstLine(s: string | null): string {
   if (!s) return '';
   const idx = s.indexOf('\n');
   return idx === -1 ? s : s.slice(0, idx);
+}
+
+/**
+ * The one-line "what they're working on now" summary for the home card.
+ * Reuses the same most-recent-branch logic the full list computes.
+ * Returns null when there is no active branch (caller renders nothing).
+ */
+export function currentBranchLine(
+  branches: ActiveBranchRow[],
+  now: Date = new Date(),
+): string | null {
+  const status = deriveStatus(branches, now);
+  if (status.kind === 'no_active_branch') return null;
+  const b = status.branch;
+  const verb =
+    status.kind === 'working_on'
+      ? 'Working on'
+      : status.kind === 'idle'
+        ? 'Last on'
+        : 'On';
+  return `${verb} ${b.branch_name} · ${relativeTime(b.last_commit_at, now)}`;
 }
 
 export function DevBranchList({ branches }: { branches: ActiveBranchRow[] }) {

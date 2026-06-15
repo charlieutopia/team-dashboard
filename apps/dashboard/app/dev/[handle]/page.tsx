@@ -1,22 +1,34 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { getDevTimeline, getDevWeeklyDigest, getDevMonthlyDigest } from '@/lib/queries';
+import {
+  getActiveBranchesByDev,
+  getCadenceByDev,
+  getDevTimeline,
+  getDevWeeklyDigest,
+  getDevMonthlyDigest,
+  getOpenPrsByDev,
+} from '@/lib/queries';
 import { TrajectoryHeatmap, type HeatmapDay } from '@/components/TrajectoryHeatmap';
 import { DayTimelineCard } from '@/components/DayTimelineCard';
 import { WeeklyDigestCard } from '@/components/WeeklyDigestCard';
 import { MonthlyDigestCard } from '@/components/MonthlyDigestCard';
 import { KpiStrip } from '@/components/KpiStrip';
 import { LevelChip } from '@/components/LevelChip';
+import { DevBranchList } from '@/components/DevBranchList';
+import { DevSignalsStrip } from '@/components/DevSignalsStrip';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DevTimelinePage({ params }: { params: { handle: string } }) {
   const supabase = createSupabaseServerClient();
-  const [result, weekly, monthly] = await Promise.all([
+  const [result, weekly, monthly, branchesRes, prsRes, cadenceByDev] = await Promise.all([
     getDevTimeline(supabase, params.handle, 30),
     getDevWeeklyDigest(supabase, params.handle),
     getDevMonthlyDigest(supabase, params.handle),
+    getActiveBranchesByDev(supabase),
+    getOpenPrsByDev(supabase),
+    getCadenceByDev(supabase),
   ]);
 
   if (!result) notFound();
@@ -31,6 +43,13 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
     klToday,
     earliestDailyReport,
   } = result;
+
+  // This dev's live branches / open PRs / commit cadence — the full detail
+  // that the home card now omits (home shows only the freshest branch line).
+  const devBranches = branchesRes.populated ? branchesRes.byDev[developer.id] : undefined;
+  const devPrs = prsRes.populated ? prsRes.byDev[developer.id] : undefined;
+  const devCadence = cadenceByDev[developer.id];
+  const primaryRepo = devBranches?.[0]?.repo_full_name;
 
   const onTrackPct = totals.total_days_with_data > 0
     ? Math.round((totals.on_track_days / totals.total_days_with_data) * 100)
@@ -81,6 +100,19 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
             : `${windowDays}-day window · ending ${klToday}`}
         </p>
       </header>
+
+      {(devBranches && devBranches.length > 0) || (devPrs && devPrs.length > 0) || devCadence ? (
+        <section className="px-4 py-3 border-b border-line">
+          <p className="mb-2 text-xs text-ink-faint uppercase tracking-wide">Working now</p>
+          <DevSignalsStrip
+            prs={devPrs}
+            cadence={devCadence}
+            githubHandle={developer.github_handle}
+            primaryRepo={primaryRepo}
+          />
+          {devBranches && devBranches.length > 0 && <DevBranchList branches={devBranches} />}
+        </section>
+      ) : null}
 
       <section className="border-b border-line">
         <p className="px-4 pt-3 pb-1 text-xs text-ink-faint uppercase tracking-wide">This Month</p>
