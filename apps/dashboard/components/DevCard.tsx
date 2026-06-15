@@ -18,6 +18,13 @@ function shortDate(isoDate: string): string {
   return `${month} ${d}`;
 }
 
+/** Today's KL date as YYYY-MM-DD — for the "ends soon" future-date check. */
+function klTodayStr(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kuala_Lumpur',
+  }).format(new Date());
+}
+
 /** Plain-English "vs last week" indicator from the cadence direction. */
 function cadenceWord(c?: CadenceEntry): { arrow: string; text: string; cls: string } | null {
   if (!c || c.direction === 'no_data') return null;
@@ -87,6 +94,12 @@ export function DevCard({
   // One compact line: the freshest active branch. Full list lives on the
   // person page. Renders nothing when there is no active branch.
   const branchLine = branches ? currentBranchLine(branches) : null;
+  // Show a muted "ends {Mon D}" hint for someone still active with a future
+  // end date. Cards on the home list are active-only, so a future end_date
+  // means they're winding down — the scanner flips them inactive once it
+  // passes, at which point they drop off this list entirely.
+  const endsSoon =
+    report.end_date && report.end_date > klTodayStr() ? report.end_date : null;
 
   return (
     <Link
@@ -117,6 +130,11 @@ export function DevCard({
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <LevelChip level={report.level} />
             {todayStatus && <TodayStatusPill status={todayStatus} />}
+            {endsSoon && (
+              <span className="text-[11px] text-ink-faint">
+                ends {shortDate(endsSoon)}
+              </span>
+            )}
           </div>
 
           {/* Commits + files counts. */}

@@ -88,6 +88,30 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
     prs_synced: 0,
   };
 
+  // 0. Auto-flip ended developers to inactive. Anyone whose end_date has
+  // already passed (strictly before today in KL) should drop off the main
+  // views — "ended = inactive". The Manage Team editor flips past/today end
+  // dates immediately; this catches dates that pass over time (e.g. a future
+  // end date set last week that has now arrived). Best-effort: log + continue
+  // on error so a flip failure never blocks the daily report run.
+  const endedRes = await sb
+    .from("developers")
+    .update({ active: false })
+    .lt("end_date", klDate)
+    .not("end_date", "is", null)
+    .eq("active", true)
+    .select("id");
+  if (endedRes.error) {
+    console.error(
+      `ended-developer auto-flip failed: ${endedRes.error.message}`,
+    );
+  } else {
+    const flipped = endedRes.data?.length ?? 0;
+    if (flipped > 0) {
+      console.log(`auto-flipped ${flipped} ended developer(s) to inactive`);
+    }
+  }
+
   // 1. Read tracked repos
   const trackedRes = await sb
     .from("tracked_repos")
