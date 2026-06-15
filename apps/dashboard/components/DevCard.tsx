@@ -30,32 +30,39 @@ function cadenceWord(c?: CadenceEntry): { arrow: string; text: string; cls: stri
   return { arrow: '≈', text: 'same as last week', cls: 'text-ink-faint' };
 }
 
-function CardMetrics({
+/** Commits + files counts. Lives in the identity block (LEFT). */
+function CountsLine({ report }: { report: DevReportRow }) {
+  const m = report.metrics ?? {};
+  const commits = m.commits_today ?? 0;
+  const files = (m.files_touched_today ?? []).length;
+  return (
+    <p className="mt-2 text-[13px] font-medium text-ink">
+      {commits} commit{commits === 1 ? '' : 's'} · {files} file{files === 1 ? '' : 's'}
+    </p>
+  );
+}
+
+/** "vs last week" cadence word + freshness date. Lives under the analysis (RIGHT). */
+function CadenceLine({
   report,
   cadence,
 }: {
   report: DevReportRow;
   cadence?: CadenceEntry;
 }) {
-  const m = report.metrics ?? {};
-  const commits = m.commits_today ?? 0;
-  const files = (m.files_touched_today ?? []).length;
   const cadenceInfo = cadenceWord(cadence);
-
   return (
     <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-muted">
-      <span className="font-medium text-ink">
-        {commits} commit{commits === 1 ? '' : 's'} · {files} file{files === 1 ? '' : 's'}
-      </span>
       {cadenceInfo && (
         <span className={`inline-flex items-center gap-1 ${cadenceInfo.cls}`}>
-          <span aria-hidden>·</span>
           <span>
             {cadenceInfo.arrow} {cadenceInfo.text}
           </span>
         </span>
       )}
-      <span className="text-ink-faint">· updated {shortDate(report.report_date)}</span>
+      <span className="text-ink-faint">
+        {cadenceInfo ? '· ' : ''}updated {shortDate(report.report_date)}
+      </span>
     </div>
   );
 }
@@ -85,48 +92,58 @@ export function DevCard({
     <Link
       href={drillHref}
       aria-label={`View ${report.display_name}'s timeline`}
-      className="group block h-full rounded-2xl border border-line bg-card p-5 shadow-sm relative transition hover:border-line-strong active:opacity-80"
+      className="group block rounded-2xl border border-line bg-card p-5 shadow-sm relative transition hover:border-line-strong active:opacity-80"
     >
       <span aria-hidden className="absolute top-5 right-5 text-ink-faint text-sm">→</span>
 
-      {/* Row 1 — identity + status */}
-      <header className="flex items-center gap-3">
-        <DevAvatar
-          displayName={report.display_name}
-          handle={report.developer_handle}
-          size="md"
-          trajectory={report.trajectory}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-[17px] font-bold leading-tight tracking-tight text-ink">
-              {report.display_name}
-            </h2>
-            <span className="text-[13px] font-medium text-ink-faint">@{report.developer_handle}</span>
+      <div className="flex flex-col sm:flex-row sm:gap-5">
+        {/* LEFT — identity + metrics */}
+        <div className="sm:w-56 sm:shrink-0">
+          <header className="flex items-center gap-3">
+            <DevAvatar
+              displayName={report.display_name}
+              handle={report.developer_handle}
+              size="md"
+              trajectory={report.trajectory}
+            />
+            <div className="flex-1 min-w-0">
+              <h2 className="text-[17px] font-bold leading-tight tracking-tight text-ink">
+                {report.display_name}
+              </h2>
+              <span className="text-[13px] font-medium text-ink-faint">@{report.developer_handle}</span>
+            </div>
+          </header>
+
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
             <LevelChip level={report.level} />
             {todayStatus && <TodayStatusPill status={todayStatus} />}
           </div>
+
+          {/* Commits + files counts. */}
+          <CountsLine report={report} />
+
+          {/* Lines of code — demoted to a whisper. */}
+          <p className="mt-1 text-[10px] text-ink-faint">
+            Lines <span className="text-green-600">+{m.lines_added_today ?? 0}</span>{' '}
+            <span className="text-red-600">−{m.lines_removed_today ?? 0}</span>
+          </p>
         </div>
-      </header>
 
-      {/* Row 2 — the hero: plain-English summary */}
-      <p className="mt-3 text-[15px] leading-relaxed text-ink line-clamp-2">
-        {report.summary}
-      </p>
+        {/* RIGHT — the hero: FULL plain-English analysis, no truncation */}
+        <div className="flex-1 min-w-0 mt-3 sm:mt-0 sm:pr-6">
+          <p className="text-[15px] leading-relaxed text-ink whitespace-pre-line">
+            {report.summary}
+          </p>
 
-      {/* Row 3 — metrics + vs-last-week + freshness */}
-      <CardMetrics report={report} cadence={cadence} />
+          {/* vs-last-week + freshness */}
+          <CadenceLine report={report} cadence={cadence} />
 
-      {/* One compact line: what they're working on now. */}
-      {branchLine && (
-        <p className="mt-1.5 text-[12px] text-ink-faint truncate">{branchLine}</p>
-      )}
-
-      {/* Lines of code — demoted to a whisper. */}
-      <p className="mt-1 text-[10px] text-ink-faint">
-        Lines <span className="text-green-600">+{m.lines_added_today ?? 0}</span>{' '}
-        <span className="text-red-600">−{m.lines_removed_today ?? 0}</span>
-      </p>
+          {/* One compact line: what they're working on now. */}
+          {branchLine && (
+            <p className="mt-1.5 text-[12px] text-ink-faint truncate">{branchLine}</p>
+          )}
+        </div>
+      </div>
     </Link>
   );
 }
@@ -145,38 +162,46 @@ function FailedCard({
     <Link
       href={`/dev/${report.developer_handle}`}
       aria-label={`View ${report.display_name}'s timeline`}
-      className="group block h-full rounded-2xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-5 shadow-sm relative transition active:opacity-80"
+      className="group block rounded-2xl border border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30 p-5 shadow-sm relative transition active:opacity-80"
     >
       <span aria-hidden className="absolute top-5 right-5 text-ink-faint text-sm">→</span>
-      <header className="flex items-center gap-3">
-        <DevAvatar
-          displayName={report.display_name}
-          handle={report.developer_handle}
-          size="md"
-          trajectory="stuck"
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-[17px] font-bold leading-tight tracking-tight text-ink">
-              {report.display_name}
-            </h2>
-            <span className="text-[13px] font-medium text-ink-faint">@{report.developer_handle}</span>
+
+      <div className="flex flex-col sm:flex-row sm:gap-5">
+        {/* LEFT — identity */}
+        <div className="sm:w-56 sm:shrink-0">
+          <header className="flex items-center gap-3">
+            <DevAvatar
+              displayName={report.display_name}
+              handle={report.developer_handle}
+              size="md"
+              trajectory="stuck"
+            />
+            <div className="flex-1 min-w-0">
+              <h2 className="text-[17px] font-bold leading-tight tracking-tight text-ink">
+                {report.display_name}
+              </h2>
+              <span className="text-[13px] font-medium text-ink-faint">@{report.developer_handle}</span>
+            </div>
+          </header>
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
             <LevelChip level={report.level} />
             {todayStatus && <TodayStatusPill status={todayStatus} />}
           </div>
         </div>
-      </header>
-      <p className="mt-3 text-[13px] text-red-700 dark:text-red-300">
-        Couldn&apos;t build today&apos;s update.
-      </p>
-      {report.error_msg && (
-        <p className="mt-1 text-xs font-mono text-red-600 dark:text-red-400 break-all">
-          {report.error_msg}
-        </p>
-      )}
-      {branchLine && (
-        <p className="mt-1.5 text-[12px] text-ink-faint truncate">{branchLine}</p>
-      )}
+
+        {/* RIGHT — the failure note */}
+        <div className="flex-1 min-w-0 mt-3 sm:mt-0 sm:pr-6">
+          <p className="text-[13px] text-red-700 dark:text-red-300">
+            We couldn&apos;t build today&apos;s update for this person.
+          </p>
+          <p className="mt-1 text-[12px] text-ink-faint" title={report.error_msg ?? undefined}>
+            It will try again automatically.
+          </p>
+          {branchLine && (
+            <p className="mt-1.5 text-[12px] text-ink-faint truncate">{branchLine}</p>
+          )}
+        </div>
+      </div>
     </Link>
   );
 }
