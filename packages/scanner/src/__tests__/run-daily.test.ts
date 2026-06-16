@@ -918,11 +918,14 @@ describe("runDaily", () => {
     expect(alice.base_sha).toBe(DEFAULT_BRANCH_SHA);
     expect(alice.commits_ahead).toBe(1);
     expect(alice.files_changed).toBe(2);
+    // Phase 2 quality — the per-branch file path list is persisted.
+    expect(alice.files_touched).toEqual(["src/x.ts", "src/y.ts"]);
     expect(alice.last_commit_message).toBe("wip");
     expect(alice.last_commit_author).toBe("alice");
     const bob = inserted.find((r: any) => r.developer_id === "dev-bob")!;
     expect(bob.branch_name).toBe("fix/b");
     expect(bob.files_changed).toBe(1);
+    expect(bob.files_touched).toEqual(["src/z.ts"]);
   });
 
   it("developer_open_prs sync: deletes for active devs + inserts per-PR payload", async () => {

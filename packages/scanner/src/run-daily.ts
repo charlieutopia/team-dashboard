@@ -65,6 +65,9 @@ interface BranchPayload {
   lines_added: number;
   lines_removed: number;
   files_changed: number;
+  // Phase 2 quality — the per-branch list of file paths touched. Feeds the
+  // weekly quality signals (e.g. test discipline) downstream of run-daily.
+  files_touched: string[];
 }
 
 function computeKlDate(now: Date): string {
@@ -261,6 +264,7 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
         lines_added: snapshot.total_additions,
         lines_removed: snapshot.total_deletions,
         files_changed: snapshot.files.length,
+        files_touched: snapshot.files.map((f) => f.filename),
       };
       const existing = branchesByHandle.get(handle);
       if (existing) {
@@ -540,6 +544,7 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
       lines_added: number;
       lines_removed: number;
       files_changed: number;
+      files_touched: string[];
     }>();
     for (const dev of resolved) {
       // Skip inactive devs — their branches are dashboard-hidden.
@@ -559,6 +564,7 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
           lines_added: b.lines_added,
           lines_removed: b.lines_removed,
           files_changed: b.files_changed,
+          files_touched: b.files_touched,
         });
       }
     }
