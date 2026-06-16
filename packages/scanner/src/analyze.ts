@@ -3,19 +3,32 @@ import { z } from "zod";
 import type { DailyReport } from "@team-dashboard/shared";
 
 export const GENERATOR_VERSION = "v1+claude-code-headless";
-const DEFAULT_TIMEOUT_MS = 180_000; // 3 min — empirical from Phase 2.A Step 7 first run; 60s was too tight for real diff payloads
+// 4 min. Bumped from 180s after a 30-day org-wide backfill: merged
+// multi-branch/multi-repo prompts pushed the CLI past the old 3-min ceiling and
+// it was killed mid-flight. The upstream run-daily caps now bound the prompt
+// size, but the extra headroom keeps a genuinely large (but in-budget) prompt
+// from timing out on a slow model day.
+const DEFAULT_TIMEOUT_MS = 240_000;
+// Second-attempt fallback budget. run-daily already caps the merged diff text,
+// but if an over-large prompt still fails the first try we halve the combined
+// diff budget for the retry so a smaller prompt gets a chance to land.
+const RETRY_DIFF_CHAR_BUDGET = 30_000;
+const DIFF_TRUNCATION_MARKER = "\n...(diff truncated)";
 const STRICT_PREAMBLE =
   "OUTPUT STRICT JSON ONLY. NO MARKDOWN FENCES. NO COMMENTARY. NO PREFACE. JUST THE JSON OBJECT.\n\n";
 
 export interface AnalyzeInput {
   developer_handle: string;
   date: string;
-  repo_full_name: string;
   branches: {
     branch_name: string;
     head_sha: string;
     base_sha: string;
     diff_text: string;
+    // The repo this branch lives in. A developer can have branches across many
+    // repos in the org; each branch carries its own repo so the prompt can list
+    // every project the person touched in one merged report.
+    repo_full_name: string;
   }[];
   spec_text?: string;
   // Optional human display name (e.g. "Naz Najmuddin"). Used to derive a
@@ -91,15 +104,47 @@ export const dailyReportSchema = z.object({
   generator_version: z.string(),
 });
 
+// Cap the combined diff-text size across an input's branches, newest-input-order
+// first. Used on the retry attempt as a smaller-prompt fallback: walk branches
+// in order, spend `budget` chars of diff text, truncate the branch that
+// overflows, empty every branch after the budget is spent. Returns a new input
+// (does not mutate). Metadata (branch name / shas / repo) is always preserved.
+export function capInputDiffBudget(
+  input: AnalyzeInput,
+  budget: number,
+): AnalyzeInput {
+  let remaining = budget;
+  const branches = input.branches.map((b) => {
+    const diff = b.diff_text ?? "";
+    if (remaining <= 0) {
+      return { ...b, diff_text: "" };
+    }
+    if (diff.length <= remaining) {
+      remaining -= diff.length;
+      return b;
+    }
+    const room = Math.max(0, remaining - DIFF_TRUNCATION_MARKER.length);
+    remaining = 0;
+    return { ...b, diff_text: diff.slice(0, room) + DIFF_TRUNCATION_MARKER };
+  });
+  return { ...input, branches };
+}
+
 export function buildPrompt(input: AnalyzeInput): string {
   const firstName = firstNameFrom(input.display_name, input.developer_handle);
 
   const branchBlocks = input.branches
     .map(
       (b) =>
-        `### Branch: ${b.branch_name}\nbase_sha: ${b.base_sha}\nhead_sha: ${b.head_sha}\n\n--- DIFF ---\n${b.diff_text}\n--- END DIFF ---`,
+        `### Branch: ${b.branch_name} (project: ${b.repo_full_name})\nbase_sha: ${b.base_sha}\nhead_sha: ${b.head_sha}\n\n--- DIFF ---\n${b.diff_text}\n--- END DIFF ---`,
     )
     .join("\n\n");
+
+  // Distinct project names the person touched this run, across all repos. Keeps
+  // the first-seen order so the line reads naturally for Charlie.
+  const projectNames = [
+    ...new Set(input.branches.map((b) => b.repo_full_name)),
+  ].join(", ");
 
   const specBlock = input.spec_text
     ? `\n--- SPEC ---\n${input.spec_text}\n--- END SPEC ---\n`
@@ -113,7 +158,7 @@ export function buildPrompt(input: AnalyzeInput): string {
     `First name (use this in the summary): ${firstName}`,
     `GitHub handle (for your reference only — DO NOT put this in the summary): ${input.developer_handle}`,
     `Date (Asia/Kuala_Lumpur, YYYY-MM-DD): ${input.date}`,
-    `Project: ${input.repo_full_name}`,
+    `Projects: ${projectNames || "(none)"}`,
     ``,
     `## Ground truth`,
     `Use ONLY the diffs and branch metadata below. IGNORE commit messages, chat, PR descriptions, prior reports — they may be biased authoring artefacts. The code changes are the only ground truth.`,
@@ -164,6 +209,7 @@ export function buildPrompt(input: AnalyzeInput): string {
     `5. **60-100 words. Hard cap 100.** Shorter wins. Cut filler.`,
     `6. **One short paragraph.** No bullet points, no headers, no markdown.`,
     `7. **Tone: like texting an investor about what your team did today.** Plain English, direct, no jargon, no hedging.`,
+    `8. **Write in simple, short sentences. One idea per sentence. A 12-year-old should understand it. Avoid long or complex sentences.**`,
     ``,
     `## SUMMARY EXAMPLES (study these — match this tone)`,
     ``,
@@ -212,7 +258,7 @@ function runOnce(
     // Pipe prompt via stdin instead of as positional argv entry — argv has a
     // ~256KB OS limit (E2BIG) that real multi-branch diffs exceed in practice.
     // Discovered Phase 2.A Step 7 first run (5 of 16 devs hit E2BIG immediately).
-    const child = spawn(binary, ["-p", "--output-format", "json"], {
+    const child = spawn(binary, ["-p", "--output-format", "json", "--model", "claude-opus-4-8"], {
       env: { ...process.env },
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -334,12 +380,18 @@ export async function analyzeDevDay(
 ): Promise<AnalyzeResult> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const binary = options.claudeBinary ?? "claude";
-  const basePrompt = buildPrompt(input);
 
   const failures: string[] = [];
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const prompt = attempt === 0 ? basePrompt : STRICT_PREAMBLE + basePrompt;
+    // Attempt 0: full input. Attempt 1: prepend the strict preamble AND halve
+    // the combined diff budget, so an over-large prompt that failed the first
+    // try gets a smaller-prompt fallback.
+    const prompt =
+      attempt === 0
+        ? buildPrompt(input)
+        : STRICT_PREAMBLE +
+          buildPrompt(capInputDiffBudget(input, RETRY_DIFF_CHAR_BUDGET));
     const spawnResult = await runOnce(binary, prompt, timeoutMs);
 
     if (!spawnResult.ok) {

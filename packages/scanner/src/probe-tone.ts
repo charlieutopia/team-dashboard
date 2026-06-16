@@ -77,6 +77,7 @@ async function main() {
       head_sha: string;
       base_sha: string;
       diff_text: string;
+      repo_full_name: string;
     }[]
   >();
 
@@ -95,6 +96,7 @@ async function main() {
       head_sha: branch.head_sha,
       base_sha: baseSha,
       diff_text: buildDiffText(snapshot.files),
+      repo_full_name: repo.full_name,
     };
     const existing = branchesByHandle.get(handle);
     if (existing) existing.push(payload);
@@ -119,7 +121,6 @@ async function main() {
     const input: AnalyzeInput = {
       developer_handle: handle,
       date: klDate,
-      repo_full_name: repo.full_name,
       branches,
       spec_text: specText,
       display_name: display_name ?? undefined,

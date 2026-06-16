@@ -15,7 +15,7 @@ function shortDate(isoDate: string): string {
   const [y, m, d] = isoDate.split('-').map(Number) as [number, number, number];
   const dt = new Date(Date.UTC(y, m - 1, d));
   const month = dt.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
-  return `${month} ${d}`;
+  return `${month} ${d}, ${y}`;
 }
 
 /** Today's KL date as YYYY-MM-DD — for the "ends soon" future-date check. */
@@ -23,6 +23,15 @@ function klTodayStr(): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kuala_Lumpur',
   }).format(new Date());
+}
+
+/** Whole days between two YYYY-MM-DD dates (UTC math, no day drift). */
+function daysBetween(fromIso: string, toIso: string): number {
+  const [fy, fm, fd] = fromIso.split('-').map(Number) as [number, number, number];
+  const [ty, tm, td] = toIso.split('-').map(Number) as [number, number, number];
+  const from = Date.UTC(fy, fm - 1, fd);
+  const to = Date.UTC(ty, tm - 1, td);
+  return Math.round((to - from) / 86400000);
 }
 
 /** Plain-English "vs last week" indicator from the cadence direction. */
@@ -101,6 +110,13 @@ export function DevCard({
   const endsSoon =
     report.end_date && report.end_date > klTodayStr() ? report.end_date : null;
 
+  // Staleness hint: the home list now shows each person's MOST-RECENT report,
+  // which may be older than today (the scanner skips quiet devs). When the
+  // report isn't from today, surface "quiet {N}d" so Charlie can spot who's
+  // gone quiet at a glance. No hint for a fresh (today's) report.
+  const quietDays = daysBetween(report.report_date, klTodayStr());
+  const quietHint = quietDays > 0 ? quietDays : null;
+
   return (
     <Link
       href={drillHref}
@@ -130,6 +146,14 @@ export function DevCard({
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <LevelChip level={report.level} />
             {todayStatus && <TodayStatusPill status={todayStatus} />}
+            {quietHint && (
+              <span
+                className="text-[11px] font-medium text-amber-600"
+                title={`Latest report is from ${shortDate(report.report_date)}`}
+              >
+                quiet {quietHint}d
+              </span>
+            )}
             {endsSoon && (
               <span className="text-[11px] text-ink-faint">
                 ends {shortDate(endsSoon)}

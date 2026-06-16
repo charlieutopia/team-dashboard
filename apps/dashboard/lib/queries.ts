@@ -70,26 +70,19 @@ export function isoWeek(klDate: string): number {
   return Math.ceil(((dt.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
+/** How far back to look for each active dev's most-recent daily_report. A dev
+ *  whose latest report is older than this drops off the home list entirely. */
+const LATEST_REPORT_WINDOW_DAYS = 60;
+
 export async function getLatestReports(supabase: SupabaseClient): Promise<LatestReportsResult> {
   const klToday = computeKlDate(new Date());
 
-  // Find the latest report_date that has any rows. Falls back to most-recent
-  // date if today's run hasn't fired yet (cron not deployed; local execution
-  // pattern means morning runs may land before Charlie reads, but mid-day
-  // checks may see yesterday's data until the next cron tick).
-  const { data: latestDateRow, error: dateErr } = await supabase
-    .from('daily_reports')
-    .select('report_date')
-    .order('report_date', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (dateErr) throw dateErr;
-
-  const reportDate = (latestDateRow as { report_date: string } | null)?.report_date ?? null;
-  if (!reportDate) {
-    return { reportDate: null, klToday, rows: [] };
-  }
+  // Show EACH active dev's most-recent daily_report, not one global latest
+  // date. The scanner now skips devs with no recent activity, so on any given
+  // day only some devs get a fresh row — keying on a single global latest date
+  // made everyone else vanish. Instead fetch a wide window of recent reports
+  // for active devs (newest-first) and keep the first row seen per developer.
+  const oldestDate = shiftKlDate(klToday, -(LATEST_REPORT_WINDOW_DAYS - 1));
 
   const { data: reports, error } = await supabase
     .from('daily_reports')
@@ -105,30 +98,51 @@ export async function getLatestReports(supabase: SupabaseClient): Promise<Latest
       error_msg,
       developers!inner ( github_handle, display_name, active, level, end_date )
     `)
-    .eq('report_date', reportDate)
+    .gte('report_date', oldestDate)
     // Inactive devs live only in /admin/team — never on the home list.
-    .eq('developers.active', true);
+    .eq('developers.active', true)
+    // Newest-first so the first row we keep per dev is their latest report.
+    .order('report_date', { ascending: false });
 
   if (error) throw error;
   if (!reports || reports.length === 0) {
-    return { reportDate, klToday, rows: [] };
+    return { reportDate: null, klToday, rows: [] };
   }
 
-  // Drift counts per developer for that date
-  const devIds = reports.map((r: any) => r.developer_id);
+  // Keep the FIRST row seen per developer_id — that's their latest report.
+  const latestByDev = new Map<string, any>();
+  for (const r of reports as any[]) {
+    if (!latestByDev.has(r.developer_id)) {
+      latestByDev.set(r.developer_id, r);
+    }
+  }
+  const latestReports = Array.from(latestByDev.values());
+
+  // Drift counts per developer, each scoped to THAT dev's own latest date
+  // (dates now vary per person, so a single global date filter won't work).
+  const reportDatePairs = latestReports.map(
+    (r: any) => `${r.developer_id}:${r.report_date}`,
+  );
+  const devIds = latestReports.map((r: any) => r.developer_id);
+  const reportDates = Array.from(
+    new Set(latestReports.map((r: any) => r.report_date)),
+  );
   const { data: driftCounts } = await supabase
     .from('drift_findings')
-    .select('developer_id', { count: 'exact', head: false })
+    .select('developer_id, report_date')
     .in('developer_id', devIds)
-    .eq('report_date', reportDate)
+    .in('report_date', reportDates)
     .eq('bucket', 'out_of_scope');
 
   const driftMap = new Map<string, number>();
   (driftCounts ?? []).forEach((d: any) => {
+    const key = `${d.developer_id}:${d.report_date}`;
+    // Only count drift on the date that matches this dev's latest report.
+    if (!reportDatePairs.includes(key)) return;
     driftMap.set(d.developer_id, (driftMap.get(d.developer_id) ?? 0) + 1);
   });
 
-  const rows: DevReportRow[] = reports.map((r: any) => ({
+  const rows: DevReportRow[] = latestReports.map((r: any) => ({
     developer_id: r.developer_id,
     developer_handle: r.developers.github_handle,
     display_name: r.developers.display_name,
@@ -152,7 +166,14 @@ export async function getLatestReports(supabase: SupabaseClient): Promise<Latest
     const orderB = TRAJECTORY_ORDER[b.trajectory ?? 'no_activity'] ?? 2;
     return orderA - orderB;
   });
-  return { reportDate, klToday, rows };
+
+  // reportDate kept for back-compat on the result shape; with per-person dates
+  // there's no single date, so report the newest one present across the team.
+  const newestReportDate = rows.reduce<string | null>(
+    (max, r) => (max === null || r.report_date > max ? r.report_date : max),
+    null,
+  );
+  return { reportDate: newestReportDate, klToday, rows };
 }
 
 // Back-compat alias for any caller still importing the old name

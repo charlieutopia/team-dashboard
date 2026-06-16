@@ -156,6 +156,7 @@ export function buildWeeklyPrompt(input: AnalyzeWeeklyInput): string {
     `5. **100-180 words. Hard cap 180.** A week deserves more space than a day, but Charlie is still on her phone — keep it tight.`,
     `6. **One short paragraph (or two if the week splits cleanly into two themes).** No bullet points, no headers, no markdown.`,
     `7. **Tone: like texting an investor about what your team did this week.** Plain English, direct, no jargon, no hedging.`,
+    `8. **Write in simple, short sentences. One idea per sentence. A 12-year-old should understand it. Avoid long or complex sentences.**`,
     ``,
     `## TOP THEMES RULES`,
     ``,
@@ -197,7 +198,7 @@ function runOnce(
   timeoutMs: number,
 ): Promise<SpawnAttemptResult> {
   return new Promise((resolve) => {
-    const child = spawn(binary, ["-p", "--output-format", "json"], {
+    const child = spawn(binary, ["-p", "--output-format", "json", "--model", "claude-opus-4-8"], {
       env: { ...process.env },
       stdio: ["pipe", "pipe", "pipe"],
     });

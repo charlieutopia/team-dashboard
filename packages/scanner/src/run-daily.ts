@@ -3,10 +3,31 @@ import type { Octokit } from "@octokit/rest";
 import { createClient } from "@supabase/supabase-js";
 import { loadEnv, createGitHubClient } from "@team-dashboard/shared";
 import type { DailyReport } from "@team-dashboard/shared";
-import { enumerateActiveBranches, enumerateOpenPrs } from "./enumerate.js";
+import {
+  enumerateActiveBranches,
+  enumerateOpenPrs,
+  enumerateOrgRepos,
+} from "./enumerate.js";
 import { getDiffBetweenCommits } from "./diff.js";
-import { getSpecForModule } from "./spec.js";
 import { analyzeDevDay, type AnalyzeInput, type AnalyzeResult } from "./analyze.js";
+
+// The GitHub org the daily scan walks. Every non-archived, non-disabled repo
+// pushed within the scan window is included.
+const ORG = "utopiabuilder";
+
+// How far back a repo's last push can be and still count as "live" for this
+// run. Env-overridable so a backfill or a quiet-weekend run can widen the
+// window without a code change.
+const ORG_SCAN_PUSHED_DAYS = Number(process.env.ORG_SCAN_PUSHED_DAYS ?? "3");
+
+// GitHub's search API is capped at 30 requests/min. The open-PR sync makes one
+// search call per (active dev × repo); a 2.1s pause between consecutive calls
+// keeps us under ~28/min even with no other search traffic.
+const PR_SEARCH_DELAY_MS = 2100;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 export interface RunDailyDeps {
   sb: SupabaseClient;
@@ -24,6 +45,8 @@ export interface RunDailyResult {
   reports_succeeded: number;
   reports_failed: number;
   skipped_no_developer: number;
+  developers_auto_discovered: number;
+  reports_skipped_stale: number;
   branches_synced: number;
   prs_synced: number;
 }
@@ -44,12 +67,6 @@ interface BranchPayload {
   files_changed: number;
 }
 
-interface TrackedRepoRow {
-  id: string;
-  full_name: string;
-  spec_module: string;
-}
-
 function computeKlDate(now: Date): string {
   // KL is UTC+8
   return new Date(now.getTime() + 8 * 3600 * 1000)
@@ -63,6 +80,22 @@ function computeKlDate(now: Date): string {
 // (~7500 tokens) keeps even 5-branch devs comfortably under context.
 const MAX_DIFF_TEXT_BYTES_PER_BRANCH = 30_000;
 
+// Per-dev prompt bounds (org-wide scan). The per-branch cap alone is not enough:
+// a dev with many branches across many repos merges into ONE prompt for
+// analyzeDevDay, so the combined size still blows past context and the CLI
+// exits 1 ("spawn exit 1") or times out. A 30-day backfill failed 11 of 12
+// reports this way. Two extra caps keep the merged prompt bounded:
+//   1. MAX_BRANCHES_PER_DEV — keep only the N most recently committed branches
+//      in the AI prompt (the rest still sync their metadata to
+//      developer_active_branches; they just don't go into the prompt).
+//   2. MAX_TOTAL_DIFF_CHARS — a combined diff-text budget across the kept
+//      branches, walked newest-first.
+// Both env-overridable so a backfill can tune them without a code change.
+const MAX_BRANCHES_PER_DEV = Number(process.env.MAX_BRANCHES_PER_DEV ?? "6");
+const MAX_TOTAL_DIFF_CHARS = Number(
+  process.env.MAX_TOTAL_DIFF_CHARS ?? "60000",
+);
+
 function buildDiffText(files: { filename: string; patch: string }[]): string {
   const full = files.map((f) => `--- ${f.filename}\n${f.patch}`).join("\n\n");
   const fullBytes = Buffer.byteLength(full, "utf8");
@@ -72,6 +105,59 @@ function buildDiffText(files: { filename: string; patch: string }[]): string {
     truncated +
     `\n\n[... TRUNCATED — original ${fullBytes} bytes, kept first ${MAX_DIFF_TEXT_BYTES_PER_BRANCH} ...]`
   );
+}
+
+// Sort a dev's branches newest-first by last commit. A branch with a null
+// last_commit_at sorts last (we can't prove it is recent). Pure (does not
+// mutate the input array).
+function sortBranchesNewestFirst(branches: BranchPayload[]): BranchPayload[] {
+  return [...branches].sort((a, b) => {
+    const at = a.last_commit_at ? new Date(a.last_commit_at).getTime() : 0;
+    const bt = b.last_commit_at ? new Date(b.last_commit_at).getTime() : 0;
+    return bt - at;
+  });
+}
+
+// Build the branch list that goes INTO the AI prompt for one dev. Caps both the
+// branch count and the combined diff-text size so the merged prompt stays
+// bounded regardless of how many branches/repos the dev touched.
+//
+// Steps:
+//   1. Sort newest-first, keep at most `maxBranches`.
+//   2. Walk the kept branches newest-first, spending a `maxTotalChars` budget:
+//      - include each branch's (already 30KB-capped) diff until the budget runs
+//        out;
+//      - the branch that overflows is truncated to fit + "\n...(diff truncated)";
+//      - every branch after the budget is exhausted keeps its name/metadata but
+//        carries an empty diff.
+// The dropped older branches and emptied diffs only affect the PROMPT — the
+// caller still syncs the full `dev.branches` to developer_active_branches.
+const DIFF_TRUNCATION_MARKER = "\n...(diff truncated)";
+
+export function selectBranchesForAnalysis(
+  branches: BranchPayload[],
+  maxBranches: number = MAX_BRANCHES_PER_DEV,
+  maxTotalChars: number = MAX_TOTAL_DIFF_CHARS,
+): BranchPayload[] {
+  const kept = sortBranchesNewestFirst(branches).slice(0, maxBranches);
+
+  let remaining = maxTotalChars;
+  return kept.map((b) => {
+    const diff = b.diff_text ?? "";
+    if (remaining <= 0) {
+      // Budget already spent — keep metadata, drop the diff entirely.
+      return { ...b, diff_text: "" };
+    }
+    if (diff.length <= remaining) {
+      remaining -= diff.length;
+      return b;
+    }
+    // This branch overflows the budget. Truncate to what fits, leaving room for
+    // the marker, then exhaust the budget so later branches carry no diff.
+    const room = Math.max(0, remaining - DIFF_TRUNCATION_MARKER.length);
+    remaining = 0;
+    return { ...b, diff_text: diff.slice(0, room) + DIFF_TRUNCATION_MARKER };
+  });
 }
 
 export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
@@ -84,6 +170,8 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
     reports_succeeded: 0,
     reports_failed: 0,
     skipped_no_developer: 0,
+    developers_auto_discovered: 0,
+    reports_skipped_stale: 0,
     branches_synced: 0,
     prs_synced: 0,
   };
@@ -112,36 +200,27 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
     }
   }
 
-  // 1. Read tracked repos
-  const trackedRes = await sb
-    .from("tracked_repos")
-    .select("id, full_name, spec_module")
-    .eq("active", true);
-  if (trackedRes.error) {
-    throw new Error(`tracked_repos query failed: ${trackedRes.error.message}`);
-  }
-  const trackedRepos = (trackedRes.data ?? []) as TrackedRepoRow[];
-  if (trackedRepos.length === 0) {
+  // 1. Enumerate every live repo in the org pushed within the scan window.
+  // Replaces the old single hardcoded tracked_repos row. Repos that are
+  // archived, disabled, or dormant (no push inside the window) are dropped by
+  // enumerateOrgRepos.
+  const pushedSince = new Date(
+    Date.now() - ORG_SCAN_PUSHED_DAYS * 24 * 3600 * 1000,
+  ).toISOString();
+  const orgRepos = await enumerateOrgRepos(octokit, ORG, pushedSince);
+  if (orgRepos.length === 0) {
     return counters;
   }
 
-  // TODO(multi-repo): if a developer has branches across multiple repos in the
-  // same day, group by (repo_id, handle) and emit one analyzeDevDay call per
-  // (repo, dev) pair. For Phase 2.A only utopiaspace is tracked, so we group
-  // by handle and assume single-repo per dev.
+  // Group branches by developer handle ONLY, across all repos. Each branch
+  // carries its own repo, so one dev's report can span multiple projects.
   const branchesByHandle = new Map<string, BranchPayload[]>();
-  let primaryRepoFullName = trackedRepos[0]!.full_name;
-  let primaryRepoSpec = "";
 
-  for (const repo of trackedRepos) {
+  for (const repo of orgRepos) {
     const branches = await enumerateActiveBranches(octokit, repo.full_name);
     if (branches.length === 0) {
       continue;
     }
-
-    // Spec text fetched once per repo (currently unused beyond first repo,
-    // see TODO above).
-    const specText = await getSpecForModule(octokit, repo.spec_module);
 
     const [owner, repoName] = repo.full_name.split("/");
     if (!owner || !repoName) {
@@ -155,7 +234,6 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
       branch: defaultBranch,
     });
     const baseSha = defaultBranchData.data.commit.sha;
-    primaryRepoFullName = repo.full_name;
 
     for (const branch of branches) {
       const snapshot = await getDiffBetweenCommits(
@@ -191,33 +269,118 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
         branchesByHandle.set(handle, [payload]);
       }
     }
-
-    // Stash spec for the loop below — single-repo case keeps it simple.
-    primaryRepoSpec = specText;
   }
 
-  // 5. Resolve developer ids; skip handles with no row.
+  // 5. Resolve developer ids — auto-discover any handle not yet in the table.
+  // Org-wide scanning means contributors appear without an HR onboarding step.
+  // For every handle we saw this run, if there is no developers row we insert a
+  // minimal auto-discovered one so the person still gets a report. email is NOT
+  // NULL + UNIQUE, so we synthesize the GitHub no-reply address to keep the
+  // insert valid; display_name comes from the GitHub profile name when set.
   interface ResolvedDev {
     handle: string;
     developer_id: string;
     display_name: string | null;
     branches: BranchPayload[];
   }
-  const resolved: ResolvedDev[] = [];
-  for (const [handle, branches] of branchesByHandle) {
-    const devRes = await sb
+
+  const seenHandles = [...branchesByHandle.keys()];
+
+  // Which handles already have a developers row?
+  const existingDevs = new Map<
+    string,
+    { id: string; display_name: string | null }
+  >();
+  if (seenHandles.length > 0) {
+    const existRes = await sb
       .from("developers")
-      .select("id, display_name")
-      .eq("github_handle", handle)
-      .maybeSingle();
-    if (devRes.error) {
+      .select("id, github_handle, display_name")
+      .in("github_handle", seenHandles);
+    if (existRes.error) {
       throw new Error(
-        `developers query failed for ${handle}: ${devRes.error.message}`,
+        `developers lookup failed: ${existRes.error.message}`,
       );
     }
-    const row = devRes.data as { id: string; display_name: string | null } | null;
+    for (const r of (existRes.data ?? []) as {
+      id: string;
+      github_handle: string;
+      display_name: string | null;
+    }[]) {
+      existingDevs.set(r.github_handle, {
+        id: r.id,
+        display_name: r.display_name,
+      });
+    }
+  }
+
+  // Insert a minimal row for each missing handle (only call getByUsername for
+  // the missing ones). Upsert ignores on conflict so two concurrent runs can't
+  // collide on the github_handle unique key.
+  const missingHandles = seenHandles.filter((h) => !existingDevs.has(h));
+  for (const handle of missingHandles) {
+    let profileName: string | null = null;
+    try {
+      const profile = await octokit.users.getByUsername({ username: handle });
+      profileName = (profile.data as { name?: string | null }).name ?? null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`getByUsername failed for ${handle}: ${msg}`);
+    }
+    const displayName = profileName && profileName.trim() ? profileName : handle;
+    const insRes = await sb
+      .from("developers")
+      .upsert(
+        {
+          github_handle: handle,
+          display_name: displayName,
+          email: `${handle}@users.noreply.github.com`,
+          active: true,
+          auto_discovered: true,
+        },
+        { onConflict: "github_handle", ignoreDuplicates: true },
+      )
+      .select("id, display_name")
+      .maybeSingle();
+    if (insRes.error) {
+      console.error(
+        `auto-discover insert failed for ${handle}: ${insRes.error.message}`,
+      );
+      continue;
+    }
+    counters.developers_auto_discovered += 1;
+    const inserted = insRes.data as
+      | { id: string; display_name: string | null }
+      | null;
+    if (inserted) {
+      existingDevs.set(handle, {
+        id: inserted.id,
+        display_name: inserted.display_name,
+      });
+    } else {
+      // ignoreDuplicates can return no row when a concurrent run won the insert.
+      // Re-read so the dev still resolves and gets a report this run.
+      const reread = await sb
+        .from("developers")
+        .select("id, display_name")
+        .eq("github_handle", handle)
+        .maybeSingle();
+      const row = reread.data as
+        | { id: string; display_name: string | null }
+        | null;
+      if (row) {
+        existingDevs.set(handle, {
+          id: row.id,
+          display_name: row.display_name,
+        });
+      }
+    }
+  }
+
+  const resolved: ResolvedDev[] = [];
+  for (const [handle, branches] of branchesByHandle) {
+    const row = existingDevs.get(handle);
     if (!row) {
-      console.log(`skip ${handle}: not in developers table`);
+      console.log(`skip ${handle}: no developers row could be resolved`);
       counters.skipped_no_developer += 1;
       continue;
     }
@@ -230,16 +393,37 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
   }
 
   // 6. Serial analyze + upsert loop.
+  // Since-filter: skip the AI call for a dev whose branches ALL have their last
+  // commit before the scan window. Their branch metadata still syncs below (so
+  // the dashboard keeps showing the branch); we just don't burn an AI call
+  // re-summarizing work that did not move inside the window. A branch with a
+  // null last_commit_at is treated as in-window (we can't prove it's stale).
+  const sinceMs = new Date(pushedSince).getTime();
   for (const dev of resolved) {
+    const hasFreshBranch = dev.branches.some((b) => {
+      if (!b.last_commit_at) return true;
+      return new Date(b.last_commit_at).getTime() >= sinceMs;
+    });
+    if (!hasFreshBranch) {
+      console.log(
+        `skip-stale ${dev.handle}: all branches older than scan window`,
+      );
+      counters.reports_skipped_stale += 1;
+      continue;
+    }
+
     counters.developers_analyzed += 1;
+    // Cap the prompt payload — branch count + combined diff size — so a dev
+    // with many branches across many repos can't merge into a prompt that
+    // crashes or times out the claude CLI. The full dev.branches still sync to
+    // developer_active_branches below; only what the AI sees is bounded.
+    const promptBranches = selectBranchesForAnalysis(dev.branches);
     let result: AnalyzeResult;
     try {
       result = await analyze({
         developer_handle: dev.handle,
         date: klDate,
-        repo_full_name: primaryRepoFullName,
-        branches: dev.branches,
-        spec_text: primaryRepoSpec,
+        branches: promptBranches,
         display_name: dev.display_name ?? undefined,
       });
     } catch (err) {
@@ -394,9 +578,9 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
 
     // 8. Sync developer_open_prs (Phase 3 Step 4).
     // Same delete-then-insert per active developer pattern. One GH search call
-    // per (active dev × tracked repo) — at 16 devs × 1 repo = 16 calls, well
-    // under the 5000/hour authed rate limit. Errors per dev fall back to
-    // logging + continue (the sync is best-effort, not transactional).
+    // per (active dev × org repo). The search API caps at 30/min, so we pause
+    // PR_SEARCH_DELAY_MS between consecutive search calls. Errors per dev fall
+    // back to logging + continue (the sync is best-effort, not transactional).
     if (activeDevIds.length > 0) {
       const delPrs = await sb
         .from("developer_open_prs")
@@ -423,8 +607,15 @@ export async function runDaily(deps: RunDailyDeps): Promise<RunDailyResult> {
     // for the same reason as branches above — defensive against overlapping
     // search-API pages or upstream reshuffles.
     const prInsertMap = new Map<string, PrInsertRow>();
+    let prSearchCount = 0;
     for (const dev of activeDevs) {
-      for (const repo of trackedRepos) {
+      for (const repo of orgRepos) {
+        // Rate-limit guard: GitHub search caps at 30/min. Pause before every
+        // search call except the first.
+        if (prSearchCount > 0) {
+          await sleep(PR_SEARCH_DELAY_MS);
+        }
+        prSearchCount += 1;
         try {
           const prs = await enumerateOpenPrs(
             octokit,

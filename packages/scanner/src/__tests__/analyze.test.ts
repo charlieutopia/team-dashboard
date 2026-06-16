@@ -13,8 +13,13 @@ vi.mock("child_process", () => ({
 }));
 
 // Import AFTER mocks are registered.
-const { analyzeDevDay, stripMarkdownFences, firstNameFrom, buildPrompt } =
-  await import("../analyze.js");
+const {
+  analyzeDevDay,
+  stripMarkdownFences,
+  firstNameFrom,
+  buildPrompt,
+  capInputDiffBudget,
+} = await import("../analyze.js");
 type AnalyzeInput = Parameters<typeof analyzeDevDay>[0];
 
 interface FakeChildOptions {
@@ -107,13 +112,13 @@ function envelope(reportLike: unknown): string {
 const baseInput: AnalyzeInput = {
   developer_handle: "naznajmuddin",
   date: "2026-05-10",
-  repo_full_name: "utopiabuilder/utopiaspace",
   branches: [
     {
       branch_name: "feat/inbox-routing",
       head_sha: "deadbeef",
       base_sha: "cafef00d",
       diff_text: "diff --git a/apps/web/src/inbox/router.ts ...",
+      repo_full_name: "utopiabuilder/utopiaspace",
     },
   ],
   spec_text: "Inbox routing must use the new handler.",
@@ -161,8 +166,15 @@ describe("analyzeDevDay", () => {
       Record<string, unknown>,
     ];
     expect(firstCallArgs[0]).toBe("claude-stub");
-    // argv must be exactly ["-p", "--output-format", "json"] — no prompt positional
-    expect(firstCallArgs[1]).toEqual(["-p", "--output-format", "json"]);
+    // argv: stdin-piped prompt (no positional), JSON output, model pinned to
+    // claude-opus-4-8. No prompt positional (E2BIG fix).
+    expect(firstCallArgs[1]).toEqual([
+      "-p",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-opus-4-8",
+    ]);
 
     // Prompt was written to stdin and contains the developer identity + strict-output marker
     const child = spawnMock.mock.results[0]!.value as FakeChild;
@@ -323,6 +335,87 @@ describe("analyzeDevDay", () => {
     if ("parse_failed" in result) throw new Error("expected DailyReport");
     expect(result.trajectory).toBe("on_track");
   });
+
+  it("second attempt uses a reduced diff budget — retry prompt is smaller", async () => {
+    // First attempt fails (spawn exit 1), forcing a retry. The input carries a
+    // diff far over the retry budget so the second prompt must be smaller.
+    const bigInput: AnalyzeInput = {
+      developer_handle: "naznajmuddin",
+      date: "2026-05-10",
+      branches: [
+        {
+          branch_name: "feat/huge",
+          head_sha: "h",
+          base_sha: "b",
+          diff_text: "Z".repeat(50_000),
+          repo_full_name: "utopiabuilder/utopiaspace",
+        },
+      ],
+    };
+    spawnMock
+      .mockImplementationOnce(
+        () => new FakeChild({ stderrChunks: ["boom"], exitCode: 1 }),
+      )
+      .mockImplementationOnce(
+        () => new FakeChild({ stdoutChunks: [envelope(validReport)] }),
+      );
+
+    const result = await analyzeDevDay(bigInput, { claudeBinary: "claude-stub" });
+
+    expect(spawnMock).toHaveBeenCalledTimes(2);
+    if ("parse_failed" in result) throw new Error("expected DailyReport");
+
+    const firstChild = spawnMock.mock.results[0]!.value as FakeChild;
+    const secondChild = spawnMock.mock.results[1]!.value as FakeChild;
+    // The retry prompt is strictly smaller (diff budget halved).
+    expect(secondChild.stdin.written.length).toBeLessThan(
+      firstChild.stdin.written.length,
+    );
+    // And it carries the strict preamble + the truncation marker.
+    expect(
+      secondChild.stdin.written.startsWith("OUTPUT STRICT JSON ONLY"),
+    ).toBe(true);
+    expect(secondChild.stdin.written).toContain("...(diff truncated)");
+  });
+});
+
+describe("capInputDiffBudget (exported helper)", () => {
+  const mk = (diff: string): AnalyzeInput["branches"][number] => ({
+    branch_name: "feat/x",
+    head_sha: "h",
+    base_sha: "b",
+    diff_text: diff,
+    repo_full_name: "utopiabuilder/utopiaspace",
+  });
+
+  it("truncates the overflow branch and empties the rest, preserving metadata", () => {
+    const input: AnalyzeInput = {
+      developer_handle: "alice",
+      date: "2026-05-10",
+      branches: [mk("a".repeat(40)), mk("b".repeat(40)), mk("c".repeat(40))],
+    };
+    const out = capInputDiffBudget(input, 50);
+    expect(out.branches[0]!.diff_text).toBe("a".repeat(40));
+    expect(out.branches[1]!.diff_text.endsWith("...(diff truncated)")).toBe(
+      true,
+    );
+    expect(out.branches[2]!.diff_text).toBe("");
+    // Metadata always survives.
+    for (const b of out.branches) {
+      expect(b.branch_name).toBe("feat/x");
+      expect(b.repo_full_name).toBe("utopiabuilder/utopiaspace");
+    }
+  });
+
+  it("leaves a small input unchanged", () => {
+    const input: AnalyzeInput = {
+      developer_handle: "alice",
+      date: "2026-05-10",
+      branches: [mk("+small"), mk("+tiny")],
+    };
+    const out = capInputDiffBudget(input, 60_000);
+    expect(out.branches.map((b) => b.diff_text)).toEqual(["+small", "+tiny"]);
+  });
 });
 
 describe("firstNameFrom (exported helper)", () => {
@@ -364,6 +457,56 @@ describe("buildPrompt — Boss-readable prompt structure", () => {
     const prompt = buildPrompt(baseInput);
     expect(prompt).toContain("ONLY the diffs");
     expect(prompt).toContain("IGNORE commit messages");
+  });
+
+  it("lists every project the person touched (Projects line, comma-separated)", () => {
+    const prompt = buildPrompt({
+      developer_handle: "alice",
+      date: "2026-05-10",
+      branches: [
+        {
+          branch_name: "feat/one",
+          head_sha: "h1",
+          base_sha: "b1",
+          diff_text: "x",
+          repo_full_name: "utopiabuilder/repo-one",
+        },
+        {
+          branch_name: "fix/two",
+          head_sha: "h2",
+          base_sha: "b2",
+          diff_text: "y",
+          repo_full_name: "utopiabuilder/repo-two",
+        },
+      ],
+    });
+    expect(prompt).toContain(
+      "Projects: utopiabuilder/repo-one, utopiabuilder/repo-two",
+    );
+    expect(prompt).not.toContain("Project: ");
+  });
+
+  it("degrades to no-spec note when spec_text is omitted (org-wide path)", () => {
+    const prompt = buildPrompt({
+      developer_handle: "alice",
+      date: "2026-05-10",
+      branches: [
+        {
+          branch_name: "feat/one",
+          head_sha: "h1",
+          base_sha: "b1",
+          diff_text: "x",
+          repo_full_name: "utopiabuilder/repo-one",
+        },
+      ],
+    });
+    expect(prompt).toContain("(no spec module configured)");
+  });
+
+  it("includes the simple-English instruction", () => {
+    const prompt = buildPrompt(baseInput);
+    expect(prompt).toContain("simple, short sentences");
+    expect(prompt).toContain("12-year-old");
   });
 });
 
