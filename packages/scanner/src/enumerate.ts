@@ -6,7 +6,49 @@ export interface BranchInfo {
   head_sha: string;
 }
 
+export interface OrgRepoInfo {
+  full_name: string;
+}
+
 const FEATURE_PREFIXES = ["wip/", "feat/", "fix/"];
+
+/**
+ * Phase 1 org-scan: list every repo in `org` that has been pushed to within
+ * the scan window. Replaces the single hardcoded tracked repo. We page through
+ * the org's repos and keep only the live ones — archived and disabled repos
+ * are dropped, and repos with no recent push (older than `pushedSinceISO`) are
+ * skipped so the daily run never diffs a dormant repo.
+ */
+export async function enumerateOrgRepos(
+  octokit: Octokit,
+  org: string,
+  pushedSinceISO: string,
+): Promise<OrgRepoInfo[]> {
+  const since = new Date(pushedSinceISO).getTime();
+  const result: OrgRepoInfo[] = [];
+  // The installed @octokit/rest exposes the GET /orgs/{org}/repos endpoint as
+  // `repos.listForOrg` (there is no `orgs.listRepos` in this version). Same
+  // endpoint, same `type`/`per_page` params.
+  for await (const response of octokit.paginate.iterator(
+    octokit.repos.listForOrg,
+    {
+      org,
+      type: "all",
+      per_page: 100,
+    },
+  )) {
+    for (const repo of response.data) {
+      const archived = (repo as { archived?: boolean }).archived ?? false;
+      const disabled = (repo as { disabled?: boolean }).disabled ?? false;
+      if (archived || disabled) continue;
+      const pushedAt = (repo as { pushed_at?: string | null }).pushed_at;
+      if (!pushedAt) continue;
+      if (new Date(pushedAt).getTime() < since) continue;
+      result.push({ full_name: repo.full_name });
+    }
+  }
+  return result;
+}
 
 export async function enumerateActiveBranches(
   octokit: Octokit,

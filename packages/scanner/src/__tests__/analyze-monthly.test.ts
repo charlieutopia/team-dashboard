@@ -172,7 +172,13 @@ describe("analyzeDevMonth", () => {
       string[],
       Record<string, unknown>,
     ];
-    expect(firstCallArgs[1]).toEqual(["-p", "--output-format", "json"]);
+    expect(firstCallArgs[1]).toEqual([
+      "-p",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-opus-4-8",
+    ]);
     const child = spawnMock.mock.results[0]!.value as FakeChild;
     expect(child.stdin.written).toContain("naznajmuddin");
     expect(child.stdin.written).toContain("STRICT JSON");

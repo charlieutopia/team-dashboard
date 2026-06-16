@@ -26,10 +26,11 @@ function formatWeekRange(weekStartDate: string): string {
   const endMonth = monthOf(end);
   const startDay = start.getUTCDate();
   const endDay = end.getUTCDate();
+  const year = end.getUTCFullYear();
 
   return startMonth === endMonth
-    ? `${startMonth} ${startDay} – ${endDay}`
-    : `${startMonth} ${startDay} – ${endMonth} ${endDay}`;
+    ? `${startMonth} ${startDay} – ${endDay}, ${year}`
+    : `${startMonth} ${startDay} – ${endMonth} ${endDay}, ${year}`;
 }
 
 export default async function WeekPage({

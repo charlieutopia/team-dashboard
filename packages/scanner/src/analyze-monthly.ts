@@ -149,6 +149,7 @@ export function buildMonthlyPrompt(input: AnalyzeMonthlyInput): string {
     `6. **Tell a TREND STORY, not a chronological list.** Don't write "in week 1 they did X, in week 2 Y, in week 3 Z". Instead: "${firstName} spent the month on two themes — A in the first half, B in the second. The pace picked up around mid-month." Trend > timeline.`,
     `7. **One or two paragraphs.** Two paragraphs is fine when the month genuinely splits into two themes; otherwise one is better. No bullets, no headers.`,
     `8. **Tone target: a quarterly business review note**, but for one person, for one month. Plain English, direct, no jargon, no hedging.`,
+    `9. **Write in simple, short sentences. One idea per sentence. A 12-year-old should understand it. Avoid long or complex sentences.**`,
     ``,
     `## TOP THEMES RULES`,
     ``,
@@ -188,7 +189,7 @@ function runOnce(
   timeoutMs: number,
 ): Promise<SpawnAttemptResult> {
   return new Promise((resolve) => {
-    const child = spawn(binary, ["-p", "--output-format", "json"], {
+    const child = spawn(binary, ["-p", "--output-format", "json", "--model", "claude-opus-4-8"], {
       env: { ...process.env },
       stdio: ["pipe", "pipe", "pipe"],
     });

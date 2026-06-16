@@ -166,7 +166,13 @@ describe("analyzeDevWeek", () => {
       Record<string, unknown>,
     ];
     expect(firstCallArgs[0]).toBe("claude-stub");
-    expect(firstCallArgs[1]).toEqual(["-p", "--output-format", "json"]);
+    expect(firstCallArgs[1]).toEqual([
+      "-p",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-opus-4-8",
+    ]);
 
     const child = spawnMock.mock.results[0]!.value as FakeChild;
     expect(child.stdin.written).toContain("naznajmuddin");

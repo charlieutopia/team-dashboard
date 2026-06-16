@@ -15,7 +15,7 @@ function formatBannerDate(isoDate: string): string {
     month: 'long',
     timeZone: 'UTC',
   });
-  return `${weekday}, ${month} ${d}`;
+  return `${weekday}, ${month} ${d}, ${y}`;
 }
 
 /** Short weekday name (e.g. "Saturday") for the "Everyone off" line. */
