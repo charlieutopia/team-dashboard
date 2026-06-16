@@ -1088,3 +1088,68 @@ export async function getDriftFindings(supabase: SupabaseClient, developerId: st
   if (error) throw error;
   return data ?? [];
 }
+
+// ─── Phase 2 quality signals ────────────────────────────────────────────────
+
+/**
+ * The five-band scale one quality dimension can land on. Mirrors the
+ * team_dashboard.quality_band enum. 'skipped' means the dimension had no
+ * evidence this week (e.g. no code branches for test discipline) — distinct
+ * from 'weak', which is a real low score.
+ */
+export type QualityBand = 'weak' | 'developing' | 'solid' | 'strong' | 'skipped';
+
+/**
+ * One developer's latest weekly quality scorecard. Each dimension carries a band
+ * plus a short human-readable evidence string. Dimensions not yet computed are
+ * null (this build ships Test Discipline first; the rest fill in later).
+ */
+export interface DevQualityRow {
+  week_start_date: string;
+  test_discipline_band: QualityBand | null;
+  test_discipline_evidence: string | null;
+  stability_band: QualityBand | null;
+  stability_evidence: string | null;
+  code_care_band: QualityBand | null;
+  code_care_evidence: string | null;
+  review_citizenship_band: QualityBand | null;
+  review_citizenship_evidence: string | null;
+  clarity_band: QualityBand | null;
+  clarity_evidence: string | null;
+  headline: string | null;
+  needs_a_chat: boolean | null;
+  level_snapshot: DevLevel | null;
+}
+
+/**
+ * The most-recent weekly quality scorecard for one developer, or null when none
+ * exists yet (the quality job hasn't run, or no week was computed for this dev).
+ * Returning null is normal — the caller owns the empty state and must never
+ * invent a band.
+ */
+export async function getDevQualityReport(
+  supabase: SupabaseClient,
+  githubHandle: string,
+): Promise<DevQualityRow | null> {
+  const { data: devRow } = await supabase
+    .from('developers')
+    .select('id')
+    .eq('github_handle', githubHandle)
+    .maybeSingle();
+  if (!devRow) return null;
+  const developerId = (devRow as { id: string }).id;
+
+  const { data, error } = await supabase
+    .from('weekly_quality_reports')
+    .select(
+      'week_start_date, test_discipline_band, test_discipline_evidence, stability_band, stability_evidence, code_care_band, code_care_evidence, review_citizenship_band, review_citizenship_evidence, clarity_band, clarity_evidence, headline, needs_a_chat, level_snapshot',
+    )
+    .eq('developer_id', developerId)
+    .order('week_start_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+  return data as DevQualityRow;
+}

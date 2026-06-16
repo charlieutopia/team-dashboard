@@ -7,6 +7,7 @@ import {
   getDevTimeline,
   getDevWeeklyDigest,
   getDevMonthlyDigest,
+  getDevQualityReport,
   getOpenPrsByDev,
 } from '@/lib/queries';
 import { TrajectoryHeatmap, type HeatmapDay } from '@/components/TrajectoryHeatmap';
@@ -17,6 +18,7 @@ import { KpiStrip } from '@/components/KpiStrip';
 import { LevelChip } from '@/components/LevelChip';
 import { DevBranchList } from '@/components/DevBranchList';
 import { DevSignalsStrip } from '@/components/DevSignalsStrip';
+import { QualitySignals } from '@/components/QualitySignals';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,10 +36,11 @@ function formatEndDate(isoDate: string): string {
 
 export default async function DevTimelinePage({ params }: { params: { handle: string } }) {
   const supabase = createSupabaseServerClient();
-  const [result, weekly, monthly, branchesRes, prsRes, cadenceByDev] = await Promise.all([
+  const [result, weekly, monthly, quality, branchesRes, prsRes, cadenceByDev] = await Promise.all([
     getDevTimeline(supabase, params.handle, 30),
     getDevWeeklyDigest(supabase, params.handle),
     getDevMonthlyDigest(supabase, params.handle),
+    getDevQualityReport(supabase, params.handle),
     getActiveBranchesByDev(supabase),
     getOpenPrsByDev(supabase),
     getCadenceByDev(supabase),
@@ -156,6 +159,17 @@ export default async function DevTimelinePage({ params }: { params: { handle: st
           </p>
         )}
       </section>
+
+      {quality ? (
+        <QualitySignals quality={quality} />
+      ) : (
+        <section className="px-4 py-3 border-b border-line">
+          <p className="mb-1 text-xs text-ink-faint uppercase tracking-wide">Work quality</p>
+          <p className="text-sm text-ink-faint">
+            No quality scorecard yet — it&rsquo;s computed from the weekly scan.
+          </p>
+        </section>
+      )}
 
       <KpiStrip
         totals={totals}
