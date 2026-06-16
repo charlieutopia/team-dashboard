@@ -82,3 +82,45 @@ export interface StuckSignal {
   commit_cadence_per_day: number;
   blocker_keyword_hits: number;
 }
+
+// Phase 2 quality — the five-band scale a single quality dimension can land on.
+// 'skipped' means the dimension had no evidence this week (e.g. no code branches
+// for test discipline), distinct from 'weak' which is a real low score.
+export type QualityBand =
+  | "weak"
+  | "developing"
+  | "solid"
+  | "strong"
+  | "skipped";
+
+// One developer's weekly quality scorecard — mirrors the
+// team_dashboard.weekly_quality_reports columns. Each dimension carries a band
+// plus a short human-readable evidence string. Dimensions not yet computed are
+// null (the Phase 2 build ships test discipline first; the rest fill in later).
+export interface WeeklyQualityReport {
+  developer_id: string;
+  week_start_date: string; // YYYY-MM-DD KL Monday
+
+  test_discipline_band: QualityBand | null;
+  test_discipline_evidence: string | null;
+
+  stability_band: QualityBand | null;
+  stability_evidence: string | null;
+
+  code_care_band: QualityBand | null;
+  code_care_evidence: string | null;
+
+  review_citizenship_band: QualityBand | null;
+  review_citizenship_evidence: string | null;
+
+  clarity_band: QualityBand | null;
+  clarity_evidence: string | null;
+
+  headline: string | null;
+  needs_a_chat: boolean | null;
+  level_snapshot: string | null;
+
+  computed_at: string | null;
+  scanner_version: string | null;
+  error_msg: string | null;
+}

@@ -11,6 +11,7 @@
     "typecheck": "pnpm -r typecheck",
     "scanner:daily": "node packages/scanner/dist/run-daily.js",
     "scanner:weekly": "node packages/scanner/dist/run-weekly.js",
+    "scanner:quality": "node packages/scanner/dist/run-quality.js",
     "scanner:monthly": "node packages/scanner/dist/run-monthly.js",
     "scanner:sync-hr": "node packages/scanner/dist/sync-hr.js",
     "scanner:probe-tone": "node packages/scanner/dist/probe-tone.js",
