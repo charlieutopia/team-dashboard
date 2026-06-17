@@ -36,6 +36,7 @@ export function KpiStrip({
     days_shipped,
     should_have_worked,
     on_leave_days,
+    off_schedule_days,
     ship_pct,
     stuck_days,
   } = totals;
@@ -62,6 +63,11 @@ export function KpiStrip({
           <p className="text-[11px] text-ink-faint mt-0.5">
             weekdays after leave and holidays
           </p>
+          {off_schedule_days > 0 && (
+            <p className="text-[11px] text-emerald-700 mt-0.5">
+              + {fmtDays(off_schedule_days)} {off_schedule_days === 1 ? 'day' : 'days'} on weekends / holidays
+            </p>
+          )}
         </div>
       </div>
 
