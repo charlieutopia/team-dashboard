@@ -213,8 +213,9 @@ export interface DevTimelineTotals {
   working_days_in_window: number; // calendar - weekends - public_holidays
   on_leave_days: number; // full + half (half-day = 0.5)
   should_have_worked: number; // working_days_in_window - on_leave_days
-  days_shipped: number; // days with commits_today > 0 (excludes parse_failed)
-  stuck_days: number; // should_have_worked - days_shipped
+  days_shipped: number; // EXPECTED-working days shipped (weekday, not holiday, not on leave). Bounded by should_have_worked so "X of Y" never overflows.
+  off_schedule_days: number; // shipped on a weekend or public holiday (extra effort, shown separately — never in the ratio)
+  stuck_days: number; // expected working days with NO activity (weekend/holiday ships credited, so off-schedule workers aren't flagged)
   ship_pct: number; // days_shipped / should_have_worked * 100, 0 when no should
 }
 
@@ -432,6 +433,7 @@ export async function getDevTimeline(
   let workingDaysInWindow = 0;
   let onLeaveDaysAccum = 0; // sum of 1.0 / 0.5 contributions
   let daysShipped = 0;
+  let offScheduleDays = 0;
 
   for (const day of days) {
     // KPI math — works on every day, not just days with daily_reports
@@ -441,12 +443,21 @@ export async function getDevTimeline(
     if (day.on_leave) {
       onLeaveDaysAccum += day.is_half_day_leave ? 0.5 : 1;
     }
-    if (
+    const shipped =
       !day.parse_failed &&
-      day.metrics &&
-      Number((day.metrics as any).commits_today ?? 0) > 0
-    ) {
-      daysShipped += 1;
+      !!day.metrics &&
+      Number((day.metrics as any).commits_today ?? 0) > 0;
+    if (shipped) {
+      // "Worked X of Y days" compares against EXPECTED working days, so only
+      // count ships on an expected working day (weekday, not holiday, not on
+      // leave). Otherwise weekend/holiday work makes X exceed Y ("14 of 11").
+      if (!day.is_weekend && !day.is_public_holiday && !day.on_leave) {
+        daysShipped += 1;
+      } else if (day.is_weekend || day.is_public_holiday) {
+        // Shipped when the company was closed — extra effort, surfaced on its
+        // own line so it's credited without breaking the attendance ratio.
+        offScheduleDays += 1;
+      }
     }
 
     // Existing totals (only days WITH data)
@@ -474,7 +485,10 @@ export async function getDevTimeline(
   }
 
   const shouldHaveWorked = Math.max(0, workingDaysInWindow - onLeaveDaysAccum);
-  const stuckDays = Math.max(0, shouldHaveWorked - daysShipped);
+  // "Quiet" = genuinely inactive expected-working days. Weekend/holiday ships
+  // count as activity here (someone who works Saturday instead of Tuesday is not
+  // going dark), so the health badge isn't tripped by off-schedule workers.
+  const stuckDays = Math.max(0, shouldHaveWorked - daysShipped - offScheduleDays);
   const shipPct =
     shouldHaveWorked > 0
       ? Math.round((daysShipped / shouldHaveWorked) * 100)
@@ -494,6 +508,7 @@ export async function getDevTimeline(
     on_leave_days: onLeaveDaysAccum,
     should_have_worked: shouldHaveWorked,
     days_shipped: daysShipped,
+    off_schedule_days: offScheduleDays,
     stuck_days: stuckDays,
     ship_pct: shipPct,
   };
