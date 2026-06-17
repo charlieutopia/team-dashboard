@@ -107,7 +107,7 @@ describe("runQuality", () => {
       "1 of 2 code branches shipped with tests (50%)",
     );
     expect(row.level_snapshot).toBe("mid");
-    expect(row.scanner_version).toBe("v1+quality-test-discipline");
+    expect(row.scanner_version).toBe("v2+quality-ai");
     // Other dimensions are left untouched (null) in this build.
     expect(row.stability_band).toBeUndefined();
     expect(upsertCalls[0]!.opts).toEqual({
