@@ -1,0 +1,128 @@
+{
+  "generated_at": "2026-06-23T17:56:17+00:00",
+  "host": "Charlies-Mini.lan",
+  "job_count": 13,
+  "counts": {
+    "scheduled": 6,
+    "ok": 7
+  },
+  "jobs": [
+    {
+      "label": "cc-token-alarm.sh",
+      "source": "cron",
+      "schedule_human": "every 10 min",
+      "description": "Alerts when Claude Code token usage is high",
+      "command": "/Users/charlieooi/bin/cc-token-alarm.sh",
+      "last_run": "2026-06-01T09:20:00",
+      "state": "scheduled"
+    },
+    {
+      "label": "run.sh",
+      "source": "cron",
+      "schedule_human": "every 5 min",
+      "description": "Watches raw/inbox for new clips to triage",
+      "command": "/Users/charlieooi/.claude/skills/inbox-watcher/run.sh",
+      "last_run": null,
+      "state": "scheduled"
+    },
+    {
+      "label": "team-dashboard.sh",
+      "source": "cron",
+      "schedule_human": "daily 07:00",
+      "description": "Builds the Boss team-activity dashboard",
+      "command": "/Users/charlieooi/bin/team-dashboard.sh daily",
+      "last_run": null,
+      "state": "scheduled"
+    },
+    {
+      "label": "team-dashboard.sh",
+      "source": "cron",
+      "schedule_human": "weekly Mon 08:00",
+      "description": "Builds the Boss team-activity dashboard",
+      "command": "/Users/charlieooi/bin/team-dashboard.sh weekly",
+      "last_run": null,
+      "state": "scheduled"
+    },
+    {
+      "label": "team-dashboard.sh",
+      "source": "cron",
+      "schedule_human": "monthly day 2 08:30",
+      "description": "Builds the Boss team-activity dashboard",
+      "command": "/Users/charlieooi/bin/team-dashboard.sh monthly",
+      "last_run": null,
+      "state": "scheduled"
+    },
+    {
+      "label": "team-dashboard-verify.sh",
+      "source": "cron",
+      "schedule_human": "daily 08:40",
+      "description": "Checks the team dashboard actually ran",
+      "command": "/Users/charlieooi/bin/team-dashboard-verify.sh",
+      "last_run": "2026-06-23T08:40:03",
+      "state": "scheduled"
+    },
+    {
+      "label": "ai.hermes.gateway",
+      "source": "launchd",
+      "schedule_human": "always on (keep-alive)",
+      "description": "Hermes agent gateway \u2014 Charlie's Discord chief-of-staff",
+      "command": "/Users/charlieooi/.hermes/hermes-agent/venv/bin/python -m hermes_cli.main gateway run --replace",
+      "last_run": "2026-06-24T00:19:15",
+      "state": "ok"
+    },
+    {
+      "label": "com.chatdaddy.backfill-incomplete",
+      "source": "launchd",
+      "schedule_human": "every hour",
+      "description": "ChatDaddy: backfill incomplete chats",
+      "command": "/opt/homebrew/bin/npx ts-node backfill-incomplete.ts",
+      "last_run": "2026-06-24T01:31:01",
+      "state": "ok"
+    },
+    {
+      "label": "com.chatdaddy.daily-digest",
+      "source": "launchd",
+      "schedule_human": "daily 09:00",
+      "description": "ChatDaddy daily digest",
+      "command": "/bin/bash /Users/charlieooi/work/utopia/chatdaddy-chat-history/scripts/daily-digest.sh",
+      "last_run": "2026-06-23T09:00:21",
+      "state": "ok"
+    },
+    {
+      "label": "com.chatdaddy.healthcheck",
+      "source": "launchd",
+      "schedule_human": "every 15 min",
+      "description": "ChatDaddy sync health check",
+      "command": "/bin/bash /Users/charlieooi/work/utopia/chatdaddy-chat-history/scripts/healthcheck.sh",
+      "last_run": "2026-06-24T01:45:34",
+      "state": "ok"
+    },
+    {
+      "label": "com.chatdaddy.media-sweep",
+      "source": "launchd",
+      "schedule_human": "once a day",
+      "description": "Downloads chat-history media before URLs expire (now once a day)",
+      "command": "/usr/bin/curl -fsS -m 90 -o /tmp/chatdaddy-media-sweep.log https://chat-sync-dashboard.vercel.app/api/media-sweep?key=***REDACTED***",
+      "last_run": null,
+      "state": "ok"
+    },
+    {
+      "label": "com.claude.usage-widget",
+      "source": "launchd",
+      "schedule_human": "at load / login",
+      "description": "Menu-bar Claude usage widget",
+      "command": "/opt/homebrew/bin/python3 /Users/charlieooi/claude-usage-widget/app.py",
+      "last_run": null,
+      "state": "ok"
+    },
+    {
+      "label": "com.utopia.cc-orchestrator",
+      "source": "launchd",
+      "schedule_human": "30 times/week (calendar)",
+      "description": "Autonomous loop orchestrator (Claude task ticks)",
+      "command": "/bin/bash -c /Users/charlieooi/.claude/plugins/marketplaces/sdlc/plugins/sdlc/runner/orchestrator-tick.sh auto",
+      "last_run": "2026-06-23T16:30:02",
+      "state": "ok"
+    }
+  ]
+}

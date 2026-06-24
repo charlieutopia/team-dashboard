@@ -1,0 +1,12 @@
+node_modules
+.next
+.vercel
+.env
+.env.local
+*.log
+.DS_Store
+.turbo
+coverage
+*.tsbuildinfo
+# Local stub answers store (dev only — production writes back to the wiki).
+data/answers.local.json

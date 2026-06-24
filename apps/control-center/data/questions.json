@@ -1,0 +1,59 @@
+{
+  "generated_at": "2026-06-23T17:52:26+00:00",
+  "date": "2026-06-24",
+  "source": "data/wiki-scores.json",
+  "phrasing": "claude (5/5 sharpened)",
+  "count": 5,
+  "questions": [
+    {
+      "id": "products-utopia-space-repo-todo-md--thinness",
+      "target": "products/utopia-space/repo-TODO.md",
+      "question": "What is the Utopia Space repo TODO list — who owns it, what's done versus still open, and the next action on each item?",
+      "why": "This page is referenced by other pages but barely written — readers arrive and find almost nothing.",
+      "metric_reason": "thinness",
+      "structure_target": "entity",
+      "score": 0.7308,
+      "priority": 1
+    },
+    {
+      "id": "products-team-dashboard-adr-005-boss-owned-ai-coders-implement-md--thinness",
+      "target": "products/team-dashboard/adr/005-boss-owned-ai-coders-implement.md",
+      "question": "What did Team Dashboard decide about boss-owned AI coders — the decision, the reason behind it, and what it means for implementation?",
+      "why": "This page is referenced by other pages but barely written — readers arrive and find almost nothing.",
+      "metric_reason": "thinness",
+      "structure_target": "entity",
+      "score": 0.6875,
+      "priority": 2
+    },
+    {
+      "id": "products-team-dashboard-adr-006-name-team-dashboard-md--thinness",
+      "target": "products/team-dashboard/adr/006-name-team-dashboard.md",
+      "question": "Why is the product named Team Dashboard — what name options were considered, who decided, and what was the reason for the final pick?",
+      "why": "This page is referenced by other pages but barely written — readers arrive and find almost nothing.",
+      "metric_reason": "thinness",
+      "structure_target": "entity",
+      "score": 0.6875,
+      "priority": 3
+    },
+    {
+      "id": "products-fleet-tracker-device-control-md--connectedness",
+      "target": "products/fleet-tracker/device-control.md",
+      "question": "How does Fleet Tracker device control connect to the rest of the wiki — which business unit, module, or device decision does it depend on?",
+      "why": "This page is an island — nothing links to it and it links nowhere, so multi-hop retrieval can never reach it.",
+      "metric_reason": "connectedness",
+      "structure_target": "entity",
+      "score": 0.675,
+      "priority": 4
+    },
+    {
+      "id": "products-merit-farm-open-questions-and-gaps-md--connectedness",
+      "target": "products/merit-farm/open-questions-and-gaps.md",
+      "question": "Which Merit Farm open questions and gaps link to other wiki pages — which business unit, module, or decision does each gap point to?",
+      "why": "This page is an island — nothing links to it and it links nowhere, so multi-hop retrieval can never reach it.",
+      "metric_reason": "connectedness",
+      "structure_target": "entity",
+      "score": 0.675,
+      "priority": 5
+    }
+  ]
+}

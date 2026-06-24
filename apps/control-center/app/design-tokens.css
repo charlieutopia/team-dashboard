@@ -1,0 +1,43 @@
+/*
+ * Control Center semantic design tokens.
+ *
+ * Stored as RGB triplets (no `rgb()` wrapper) so Tailwind utilities can apply
+ * opacity via the `rgb(var(--x) / <alpha-value>)` pattern.
+ *
+ * The Control Center shell uses the dark surface from the discarded
+ * charlie-work prototype (panel / panel-2 / border) so the ported Job Monitor
+ * and Daily Grill keep the same look. Same token NAMES as apps/dashboard where
+ * they overlap (app / line / ink…), different VALUES (dark).
+ *
+ * Categories:
+ *   - surface (app / panel / panel-2)  — background layers
+ *   - line / line-strong               — borders
+ *   - ink / ink-muted / ink-faint      — text hierarchy
+ *   - state                            — job health dot colours
+ *   - accent                           — links + primary buttons
+ */
+
+:root {
+  /* Surface (dark) */
+  --app: 15 17 21;          /* #0f1115 */
+  --panel: 23 26 33;        /* #171a21 */
+  --panel-2: 28 32 41;      /* #1c2029 */
+
+  /* Lines */
+  --line: 38 43 54;         /* #262b36 */
+  --line-strong: 55 62 78;
+
+  /* Text */
+  --ink: 230 232 236;       /* #e6e8ec */
+  --ink-muted: 138 144 156; /* #8a909c */
+  --ink-faint: 107 114 128; /* #6b7280 */
+
+  /* Job state (semantic, fixed) — green ok / red fail / grey disabled / blue scheduled */
+  --state-ok: 46 204 113;       /* #2ecc71 */
+  --state-fail: 231 76 60;      /* #e74c3c */
+  --state-disabled: 107 114 128;/* #6b7280 */
+  --state-scheduled: 59 130 246;/* #3b82f6 */
+
+  /* Accent */
+  --accent: 59 130 246;     /* #3b82f6 */
+}

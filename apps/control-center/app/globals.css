@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import './design-tokens.css';
+
+html, body {
+  @apply bg-app text-ink;
+  -webkit-tap-highlight-color: transparent;
+}
