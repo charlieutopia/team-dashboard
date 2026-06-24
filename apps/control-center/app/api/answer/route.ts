@@ -1,16 +1,14 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// LOCAL MVP: append the answer to data/answers.json so the grill loop works
-// end-to-end in dev. PROD TODO (separate slice): write answers back to the
-// utopia-docs wiki as structured pages via a SERVER-ONLY GitHub token — not
-// built here, and no token lives in this app.
-const ANSWERS = path.join(process.cwd(), 'data', 'answers.json');
-
+// Persists a grill answer to public.cc_answers using the LOGGED-IN user's
+// Supabase session (RLS restricts insert/select to the allowed emails). No
+// service-role key, no GitHub token — nothing sensitive in this function.
+// Turning answers into structured wiki pages stays a separate, human-approved
+// step (Charlie reviews captured answers, then they are distilled).
 export async function POST(req: Request) {
   let body: { id?: string; question?: string; answer?: string };
   try {
@@ -22,26 +20,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'empty answer' }, { status: 400 });
   }
 
-  const entry = {
-    id: body.id ?? null,
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'not authenticated' }, { status: 401 });
+  }
+
+  const { error } = await supabase.from('cc_answers').insert({
+    question_id: body.id ?? null,
     question: body.question ?? null,
     answer: body.answer.trim(),
-    answered_at: new Date().toISOString(),
-  };
+    user_email: user.email ?? null,
+  });
 
-  try {
-    let list: unknown[] = [];
-    try {
-      list = JSON.parse(await fs.readFile(ANSWERS, 'utf8')) as unknown[];
-    } catch {
-      list = [];
-    }
-    list.push(entry);
-    await fs.writeFile(ANSWERS, JSON.stringify(list, null, 2) + '\n');
-    return NextResponse.json({ ok: true, persisted: true });
-  } catch {
-    // Vercel's runtime FS is read-only — the prod writeback slice handles
-    // persistence. Don't fail the request; the answer was received.
-    return NextResponse.json({ ok: true, persisted: false });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  return NextResponse.json({ ok: true, persisted: true });
 }
